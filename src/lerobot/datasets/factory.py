@@ -101,6 +101,42 @@ def resolve_delta_timestamps(
     return delta_timestamps
 
 
+def _resolve_feature_keys(
+    cfg: TrainPipelineConfig,
+    ds_meta: LeRobotDatasetMetadata,
+) -> list[str] | None:
+    """Resolve raw fields declared by the trainable config.
+
+    Returning ``None`` keeps the full dataset schema when projection cannot be established safely.
+    """
+    policy_config = cfg.trainable_config
+    input_features = policy_config.input_features
+    if not input_features:
+        return None
+
+    # Project only when every declared feature maps back to the dataset.
+    dataset_to_policy_key = {key: cfg.rename_map.get(key, key) for key in ds_meta.features}
+    available_policy_keys = set(dataset_to_policy_key.values())
+    if set(input_features) - available_policy_keys:
+        return None
+
+    output_features = policy_config.output_features or {}
+    # Map the canonical action output to raw action fields, including split action columns.
+    dataset_action_keys = [key for key, mapped_key in dataset_to_policy_key.items() if mapped_key == ACTION]
+    if not dataset_action_keys:
+        dataset_action_keys = [key for key in ds_meta.features if key.startswith(f"{ACTION}.")]
+    unmatched_output_keys = set(output_features) - available_policy_keys
+    if unmatched_output_keys - {ACTION} or (ACTION in unmatched_output_keys and not dataset_action_keys):
+        return None
+
+    required_policy_keys = set(input_features) | set(output_features)
+    return [
+        key
+        for key, mapped_key in dataset_to_policy_key.items()
+        if mapped_key in required_policy_keys or key in dataset_action_keys
+    ]
+
+
 def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDataset:
     """Handles the logic of setting up delta timestamps and image transforms before creating a dataset.
 
@@ -125,6 +161,7 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
             repo_type=cfg.dataset.repo_type,
         )
         delta_timestamps = resolve_delta_timestamps(cfg.trainable_config, ds_meta, cfg.rename_map)
+        feature_keys = _resolve_feature_keys(cfg, ds_meta)
         episodes = resolve_episode_indices(
             cfg.dataset.episodes, ds_meta.total_episodes, cfg.dataset.exclude_episodes
         )
@@ -144,6 +181,7 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
                 return_uint8=True,
                 depth_output_unit=cfg.dataset.depth_output_unit,
                 tolerance_s=cfg.tolerance_s,
+                feature_keys=feature_keys,
             )
         else:
             dataset = StreamingLeRobotDataset(
@@ -223,6 +261,7 @@ def make_train_eval_datasets(
     )
 
     delta_timestamps = resolve_delta_timestamps(cfg.trainable_config, full_dataset.meta, cfg.rename_map)
+    feature_keys = _resolve_feature_keys(cfg, full_dataset.meta)
 
     train_image_transforms = (
         ImageTransforms(cfg.dataset.image_transforms) if cfg.dataset.image_transforms.enable else None
@@ -238,6 +277,7 @@ def make_train_eval_datasets(
         video_backend=cfg.dataset.video_backend,
         return_uint8=True,
         tolerance_s=cfg.tolerance_s,
+        feature_keys=feature_keys,
     )
 
     eval_dataset = LeRobotDataset(
@@ -250,6 +290,7 @@ def make_train_eval_datasets(
         video_backend=cfg.dataset.video_backend,
         return_uint8=True,
         tolerance_s=cfg.tolerance_s,
+        feature_keys=feature_keys,
     )
 
     if cfg.dataset.use_imagenet_stats:

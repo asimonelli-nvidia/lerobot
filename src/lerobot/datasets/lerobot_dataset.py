@@ -65,6 +65,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         encoder_threads: int | None = None,
         streaming_encoding: bool = False,
         encoder_queue_maxsize: int = 30,
+        feature_keys: list[str] | None = None,
         *,
         token: str | bool | None = None,
     ):
@@ -199,6 +200,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 instead of writing PNG images first. This makes save_episode() near-instant. Defaults to False.
             encoder_queue_maxsize (int, optional): Maximum number of frames to buffer per camera when using
                 streaming encoding. Defaults to 30 (~1s at 30fps).
+            feature_keys: Optional dataset features to materialize. None keeps the full schema.
             token: Authentication token used while downloading this dataset
                 from the Hub. Pass a string token, ``True`` to require the
                 locally stored token, ``False`` to disable authentication, or
@@ -219,6 +221,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         self._video_backend = video_backend if video_backend else get_safe_default_video_backend()
         self._return_uint8 = return_uint8
         self._depth_output_unit = depth_output_unit
+        self.feature_keys = feature_keys
         self._batch_encoding_size = batch_encoding_size
         self._encoder_threads = encoder_threads
 
@@ -265,6 +268,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             image_transforms=image_transforms,
             return_uint8=self._return_uint8,
             depth_output_unit=self._depth_output_unit,
+            feature_keys=self.feature_keys,
         )
         self.image_transforms = image_transforms
 
@@ -339,6 +343,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 image_transforms=self.image_transforms,
                 return_uint8=self._return_uint8,
                 depth_output_unit=self._depth_output_unit,
+                feature_keys=self.feature_keys,
             )
         return self.reader
 
@@ -523,6 +528,22 @@ class LeRobotDataset(torch.utils.data.Dataset):
             # One-shot load after finalize()
             reader.load_and_activate()
         return reader.get_item(idx)
+
+    def __getitems__(self, indices: list[int]) -> list[dict]:
+        """Return items through PyTorch's map-style batched-fetch hook.
+
+        Automatic batching calls this method with indices already chosen by the sampler. Their order and
+        duplicates are preserved.
+        """
+        if self.writer is not None and not self._is_finalized:
+            raise RuntimeError(
+                "Cannot read from a dataset that is being recorded. Call finalize() first, then access items."
+            )
+
+        reader = self._ensure_reader()
+        if reader.hf_dataset is None:
+            reader.load_and_activate()
+        return reader.get_items(indices)
 
     def select_columns(self, column_names: str | list[str]):
         """Select specific columns from the underlying dataset.
@@ -762,6 +783,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         obj.tolerance_s = tolerance_s
         obj.image_transforms = None
         obj.delta_timestamps = None
+        obj.feature_keys = None
         obj.episodes = None
         obj._video_backend = video_backend if video_backend is not None else get_safe_default_video_backend()
         obj._return_uint8 = False
@@ -865,6 +887,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         obj.tolerance_s = tolerance_s
         obj.image_transforms = None
         obj.delta_timestamps = None
+        obj.feature_keys = None
         obj.episodes = None
         obj._video_backend = video_backend if video_backend else get_safe_default_video_backend()
         obj._return_uint8 = False

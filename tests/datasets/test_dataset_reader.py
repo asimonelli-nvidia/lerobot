@@ -15,11 +15,16 @@
 # limitations under the License.
 """Contract tests for DatasetReader."""
 
+from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
+import torch
 
 pytest.importorskip("datasets", reason="datasets is required (install lerobot[dataset])")
 
 from lerobot.datasets.dataset_reader import DatasetReader
+from lerobot.datasets.factory import _resolve_feature_keys
 from lerobot.datasets.language import LANGUAGE_EVENTS
 from lerobot.utils.import_utils import get_safe_default_video_backend
 
@@ -136,6 +141,139 @@ def test_get_item_values_are_correct(tmp_path, lerobot_dataset_factory):
 
     assert item_0["index"].item() == 0
     assert item_0["episode_index"].item() == 0
+
+
+def test_get_items_matches_scalar_temporal_reads_and_order(tmp_path, lerobot_dataset_factory):
+    """Batched reads match scalar reads across temporal boundaries and preserve order."""
+    dataset = lerobot_dataset_factory(
+        root=tmp_path / "ds",
+        total_episodes=2,
+        total_frames=20,
+        use_videos=False,
+        delta_timestamps={"state": [-1 / 30, 0.0, 1 / 30], "action": [0.0, 1 / 30]},
+    )
+    # Include episode boundaries, non-monotonic order, and a duplicate index.
+    indices = [10, 0, 9, 11, 1, 19, 10]
+    expected = [dataset[index] for index in indices]
+
+    actual = dataset.__getitems__(indices)
+
+    assert len(actual) == len(indices)
+    for actual_item, expected_item in zip(actual, expected, strict=True):
+        assert actual_item.keys() == expected_item.keys()
+        for key in actual_item:
+            if isinstance(actual_item[key], torch.Tensor):
+                torch.testing.assert_close(actual_item[key], expected_item[key], rtol=0, atol=0)
+            else:
+                assert actual_item[key] == expected_item[key]
+
+
+def test_dataloader_uses_batched_fetch_hook(tmp_path, lerobot_dataset_factory, monkeypatch):
+    """PyTorch automatic batching calls the dataset's batched-fetch hook."""
+    dataset = lerobot_dataset_factory(
+        root=tmp_path / "ds", total_episodes=1, total_frames=12, use_videos=False
+    )
+    calls = []
+    get_items = dataset.reader.get_items
+
+    def tracked_get_items(indices):
+        calls.append(list(indices))
+        return get_items(indices)
+
+    monkeypatch.setattr(dataset.reader, "get_items", tracked_get_items)
+    batch = next(iter(torch.utils.data.DataLoader(dataset, batch_size=4, num_workers=0)))
+
+    assert calls == [[0, 1, 2, 3]]
+    torch.testing.assert_close(batch["index"], torch.arange(4))
+
+
+def test_query_videos_batch_groups_sources_and_restores_request_order(monkeypatch):
+    """Video requests are grouped by source and scattered to their original items."""
+    calls = []
+
+    def decode(path, timestamps, video_key):
+        calls.append((path, timestamps, video_key))
+        return torch.tensor(timestamps)
+
+    reader = DatasetReader.__new__(DatasetReader)
+    reader._selected_video_keys = ["camera_a", "camera_b"]
+    monkeypatch.setattr(reader, "_decode_video", decode)
+    requests = {
+        (Path("a.mp4"), "camera_a"): [(0, (0.1, 0.2)), (2, (0.4,))],
+        (Path("b.mp4"), "camera_b"): [(1, (0.3,))],
+    }
+
+    frames = reader._query_videos_batch(requests)
+
+    torch.testing.assert_close(frames[(0, "camera_a")], torch.tensor([0.1, 0.2]))
+    torch.testing.assert_close(frames[(1, "camera_b")], torch.tensor(0.3))
+    torch.testing.assert_close(frames[(2, "camera_a")], torch.tensor(0.4))
+    assert sorted((str(path), timestamps, key) for path, timestamps, key in calls) == [
+        ("a.mp4", [0.1, 0.2, 0.4], "camera_a"),
+        ("b.mp4", [0.3], "camera_b"),
+    ]
+
+
+def test_reader_projects_columns_and_preserves_required_fields(tmp_path, lerobot_dataset_factory):
+    """Feature projection retains only requested and reader-required columns."""
+    dataset = lerobot_dataset_factory(
+        root=tmp_path / "ds",
+        total_episodes=1,
+        total_frames=10,
+        use_videos=False,
+        feature_keys=["state", "action", "laptop"],
+    )
+
+    assert set(dataset.reader.hf_dataset.column_names) == {
+        "state",
+        "action",
+        "laptop",
+        "timestamp",
+        "frame_index",
+        "episode_index",
+        "index",
+        "task_index",
+    }
+    assert set(dataset[0]) == {*dataset.reader.hf_dataset.column_names, "task"}
+
+
+def test_feature_projection_maps_explicit_policy_features():
+    """Policy feature names map back to dataset names through rename_map."""
+    config = SimpleNamespace(
+        trainable_config=SimpleNamespace(
+            input_features={"model.camera": object(), "observation.state": object()},
+            output_features={"action": object()},
+        ),
+        rename_map={"raw.camera": "model.camera"},
+    )
+    metadata = SimpleNamespace(
+        features={
+            "raw.camera": {},
+            "unused.camera": {},
+            "observation.state": {},
+            "action": {},
+        }
+    )
+
+    assert _resolve_feature_keys(config, metadata) == [
+        "raw.camera",
+        "observation.state",
+        "action",
+    ]
+
+
+def test_feature_projection_keeps_full_schema_when_inputs_do_not_map():
+    """An incomplete policy-to-dataset mapping disables feature projection."""
+    config = SimpleNamespace(
+        trainable_config=SimpleNamespace(
+            input_features={"observation.missing": object()},
+            output_features={},
+        ),
+        rename_map={},
+    )
+    metadata = SimpleNamespace(features={"observation.state": {}, "action": {}})
+
+    assert _resolve_feature_keys(config, metadata) is None
 
 
 # ── Transforms ───────────────────────────────────────────────────────
