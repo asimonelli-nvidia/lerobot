@@ -96,11 +96,29 @@ def compute_horizon_relative_stats(dataset_root: Path, action_horizon: int) -> d
     return {key: value.tolist() for key, value in computed.items()}
 
 
+def normalize_vector_feature_names(dataset_root: Path) -> None:
+    """Use the flat names shape expected by the current GR00T processor."""
+    info_path = dataset_root / "meta/info.json"
+    info = json.loads(info_path.read_text(encoding="utf-8"))
+    changed = False
+    for feature_key in ("action", "observation.state"):
+        names = info.get("features", {}).get(feature_key, {}).get("names")
+        if not isinstance(names, dict):
+            continue
+        flattened = next((value for value in names.values() if isinstance(value, list)), None)
+        if flattened is not None:
+            info["features"][feature_key]["names"] = flattened
+            changed = True
+    if changed:
+        write_json(info_path, info)
+
+
 def write_relative_stats(dataset_root: Path, action_horizon: int) -> None:
     stats_path = dataset_root / "meta/stats.json"
     stats = json.loads(stats_path.read_text(encoding="utf-8"))
     stats["action"] = compute_horizon_relative_stats(dataset_root, action_horizon)
     write_json(stats_path, stats)
+    normalize_vector_feature_names(dataset_root)
 
 
 def main() -> None:
