@@ -24,6 +24,13 @@ and failures in the evidence bundle.
 Do not average initialization into steady state. Derive throughput from the measured step-time window
 and effective batch. State whether the comparison is paired and whether all expected repeats finished.
 
+## Results for an inference target
+
+Show steady-state p50 and p95 latency, throughput or control frequency, GPU utilization and memory,
+and whether the real-time target was met. Retain model-load and first-request latency separately,
+plus batch, concurrency, input shapes, action horizon, precision or quantization, power, energy per
+request, and the exact runtime. Do not reuse training step or warm-up semantics without relabeling them.
+
 ## Raw evidence
 
 Keep relative pointers to the console log, offline tracker directory, GPU samples, host/process samples,
