@@ -119,6 +119,7 @@ def _parse_training(
         "warmup_steps_excluded": warmup_steps,
         "first_logged_step": int(rows[0]["step"]) if rows else None,
         "last_logged_step": int(rows[-1]["step"]) if rows else None,
+        "first_step_epoch_s": rows[0].get("_timestamp_epoch_s") if rows else None,
         "measurement_window_epoch_s": list(measurement_window) if measurement_window else None,
         "metrics": {key: _stats([row[key] for row in measured if key in row]) for key in keys},
     }
@@ -204,6 +205,13 @@ def _parse_system(path: Path, window: tuple[float, float] | None = None) -> dict
 def main() -> None:
     args = parse_args()
     _, training, measurement_window = _parse_training(args.console, args.warmup_steps)
+    process = json.loads(args.process_summary.read_text(encoding="utf-8"))
+    first_step_epoch_s = training.get("first_step_epoch_s")
+    if first_step_epoch_s is not None:
+        process_started_epoch_s = datetime.fromisoformat(process["started_at_utc"]).timestamp()
+        training["startup_to_first_step_s"] = max(0.0, first_step_epoch_s - process_started_epoch_s)
+    else:
+        training["startup_to_first_step_s"] = None
     result = {
         "schema_version": "1.0",
         "training": training,
@@ -215,7 +223,7 @@ def main() -> None:
             "steady_state": _parse_system(args.system, measurement_window),
             "full_run": _parse_system(args.system),
         },
-        "process": json.loads(args.process_summary.read_text(encoding="utf-8")),
+        "process": process,
         "raw_files": {
             "console": str(args.console),
             "gpu": str(args.gpu),
