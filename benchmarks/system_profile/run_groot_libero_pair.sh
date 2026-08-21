@@ -109,7 +109,7 @@ run_one() {
   local_output=${runtime}/outputs/${label}
   console=${output_dir}/console.log
   gpu_csv=${output_dir}/gpu.csv
-  mkdir -p "${output_dir}" "${local_output}"
+  mkdir -p "${output_dir}"
 
   printf '%s\n' "${sha}" >"${output_dir}/git-sha.txt"
   printf '%s\n' "${implementation}" >"${output_dir}/implementation.txt"
