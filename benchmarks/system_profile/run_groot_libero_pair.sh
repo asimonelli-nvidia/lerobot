@@ -5,7 +5,8 @@ shared_root=${SHARED_ROOT:-/home/scratch.asimonelli_wwfo}
 repo=${REPO_PATH:-${shared_root}/experiments/lerobot-batched-benchmark}
 dataset_source=${DATASET_ROOT:-${shared_root}/dataloading/data/libero_spatial_v21}
 environment=${PYTHON_ENV:-${shared_root}/dataloading/lerobot-batched-pr/.venv}
-hf_source=${HF_SOURCE:-${shared_root}/dataloading/cache/huggingface}
+model_source=${MODEL_SOURCE:-${shared_root}/v2d/artifacts/models/GR00T-N1.7-3B}
+hf_source=${HF_SOURCE:-${shared_root}/v2d/cache/huggingface}
 results_base=${RESULTS_ROOT:-${shared_root}/experiments/lerobot-batched-benchmark-results}
 
 baseline_sha=${BASELINE_SHA:-223a8ad16c52dad961cc1104477ffc3369c5189a}
@@ -20,7 +21,10 @@ telemetry_interval_ms=${TELEMETRY_INTERVAL_MS:-250}
 job_id=${SLURM_JOB_ID:-manual-$(date -u +%Y%m%dT%H%M%SZ)}
 results_root=${results_base}/h100-libero/${job_id}
 runtime=$(mktemp -d "${SLURM_TMPDIR:-/tmp}/lerobot-batched-${job_id}.XXXXXX")
-mkdir -p "${results_root}" "${runtime}/sources" "${runtime}/data" "${runtime}/hf/hub" "${runtime}/outputs"
+mkdir -p \
+  "${results_root}" "${runtime}/sources" "${runtime}/data" "${runtime}/hf/hub" \
+  "${runtime}/models" "${runtime}/outputs" "${runtime}/home" "${runtime}/wandb-cache" \
+  "${runtime}/wandb-config" "${runtime}/wandb-data"
 
 cleanup() {
   if [[ -n ${gpu_monitor_pid:-} ]]; then
@@ -35,7 +39,8 @@ python=${environment}/bin/python
 monitor=${repo}/benchmarks/system_profile/monitor_process.py
 summarizer=${repo}/benchmarks/system_profile/summarize_run.py
 
-for required in "${repo}/.git" "${dataset_source}" "${python}" "${monitor}" "${summarizer}"; do
+for required in \
+  "${repo}/.git" "${dataset_source}" "${model_source}" "${python}" "${monitor}" "${summarizer}"; do
   if [[ ! -e ${required} ]]; then
     echo "missing required benchmark input: ${required}" >&2
     exit 2
@@ -44,7 +49,8 @@ done
 
 # Stage immutable inputs once per allocation. Setup time is kept outside every measured run.
 cp -a "${dataset_source}" "${runtime}/data/libero_spatial_v21"
-for model in models--nvidia--GR00T-N1.7-3B models--nvidia--Cosmos-Reason2-2B; do
+cp -a "${model_source}" "${runtime}/models/GR00T-N1.7-3B"
+for model in models--nvidia--Cosmos-Reason2-2B; do
   if [[ -d ${hf_source}/hub/${model} ]]; then
     cp -a "${hf_source}/hub/${model}" "${runtime}/hf/hub/${model}"
   fi
@@ -69,6 +75,11 @@ export MKL_NUM_THREADS=1
 export WANDB_MODE=offline
 export WANDB_SILENT=true
 export WANDB_CONSOLE=off
+export WANDB_CACHE_DIR=${runtime}/wandb-cache
+export WANDB_CONFIG_DIR=${runtime}/wandb-config
+export WANDB_DATA_DIR=${runtime}/wandb-data
+export XDG_CACHE_HOME=${runtime}/cache
+export HOME=${runtime}/home
 export LD_LIBRARY_PATH=${shared_root}/dataloading/ffmpeg7-x86/lib:/home/tools/cuda/cudatoolkit_12.2.1/lib64:${LD_LIBRARY_PATH:-}
 export TRITON_CACHE_DIR=${runtime}/triton
 export TORCHINDUCTOR_CACHE_DIR=${runtime}/torchinductor
@@ -132,7 +143,7 @@ run_one() {
       --dataset.image_transforms.enable=true --dataset.image_transforms.max_num_transforms=4 \
       --dataset.image_transforms.tfs="${image_transforms}" \
       --policy.type=groot --policy.device=cuda \
-      --policy.base_model_path=nvidia/GR00T-N1.7-3B --policy.embodiment_tag=libero_sim \
+      --policy.base_model_path="${runtime}/models/GR00T-N1.7-3B" --policy.embodiment_tag=libero_sim \
       --policy.push_to_hub=false --policy.use_relative_actions=false --policy.max_steps=20000 \
       --batch_size="${batch_size}" --steps="${steps}" --save_checkpoint=false \
       --env_eval_freq=0 --eval_steps=0 --log_freq=1 \
