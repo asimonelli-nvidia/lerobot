@@ -71,3 +71,6 @@ STEPS=20 WARMUP_STEPS=5 REPEATS=1 TIME_LIMIT=00:30:00 QOS=batch-short \
 
 The validation run is not a benchmark result. Its only purpose is to verify the environment,
 dataset, model cache, and command before reserving the GPU for the full paired experiment.
+
+The agent-facing entrypoint is `skills/physical-ai-experiments/SKILL.md`. It defines the target,
+fairness, evidence-retention, comparison, and sharing rules that wrap this harness.
