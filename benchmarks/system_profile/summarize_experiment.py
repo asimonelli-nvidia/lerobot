@@ -49,15 +49,22 @@ def metric(summary: dict[str, Any], group: str, name: str, statistic: str = "mea
 
 def summarize_run(summary: dict[str, Any], batch_size: int) -> dict[str, float]:
     step_time = metric(summary, "training", "step_s")
+    throughput = batch_size / step_time
+    power = metric(summary, "gpu", "power_draw_w")
+    memory_used = metric(summary, "gpu", "memory_used_mib", "p95")
+    memory_total = metric(summary, "gpu", "memory_total_mib", "p50")
     return {
         "step_time_s": step_time,
-        "throughput_samples_s": batch_size / step_time,
+        "throughput_samples_s": throughput,
+        "gpu_hours_per_million_samples": 1_000_000 / throughput / 3600,
+        "gpu_energy_j_per_sample": power / throughput,
         "data_time_s": metric(summary, "training", "data_s"),
         "preprocess_time_s": metric(summary, "training", "prep_s"),
         "update_time_s": metric(summary, "training", "updt_s"),
         "gpu_utilization_percent": metric(summary, "gpu", "utilization_gpu_percent"),
-        "gpu_memory_used_mib_p95": metric(summary, "gpu", "memory_used_mib", "p95"),
-        "gpu_power_w": metric(summary, "gpu", "power_draw_w"),
+        "gpu_memory_used_mib_p95": memory_used,
+        "gpu_memory_headroom_mib_p95": memory_total - memory_used,
+        "gpu_power_w": power,
         "host_cpu_percent": metric(summary, "system", "cpu_percent"),
         "process_rss_gib": metric(summary, "system", "process_tree_rss_gib"),
         "startup_to_first_step_s": float(summary["training"]["startup_to_first_step_s"]),
