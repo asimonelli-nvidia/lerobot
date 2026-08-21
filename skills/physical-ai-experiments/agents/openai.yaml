@@ -1,0 +1,5 @@
+interface:
+  display_name: "Physical AI Experiments"
+  short_description: "Run and compare system evidence cards"
+  brand_color: "#76B900"
+  default_prompt: "Use $physical-ai-experiments to define and run a reproducible Physical AI system experiment."
