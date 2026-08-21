@@ -84,9 +84,11 @@ trap cleanup EXIT
 python=${environment}/bin/python
 monitor=${repo}/benchmarks/system_profile/monitor_process.py
 summarizer=${repo}/benchmarks/system_profile/summarize_run.py
+experiment_summarizer=${repo}/benchmarks/system_profile/summarize_experiment.py
 
 for required in \
-  "${repo}/.git" "${dataset_source}" "${model_source}" "${python}" "${monitor}" "${summarizer}"; do
+  "${repo}/.git" "${dataset_source}" "${model_source}" "${python}" "${monitor}" "${summarizer}" \
+  "${experiment_summarizer}"; do
   if [[ ! -e ${required} ]]; then
     echo "missing required benchmark input: ${required}" >&2
     exit 2
@@ -287,3 +289,4 @@ for ((repeat = 0; repeat < repeats; repeat++)); do
 done
 
 date -u +%FT%TZ >"${metadata}/finished_at_utc.txt"
+"${python}" "${experiment_summarizer}" "${results_root}" || true

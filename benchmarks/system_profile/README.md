@@ -39,6 +39,13 @@ Every run retains:
 - hardware, filesystem, package, dataset, and exact Git commit metadata;
 - a compact JSON summary with distribution statistics after the warm-up window.
 
+Once every paired repeat is complete, create the experiment-level result (including paired
+proposal-vs-baseline throughput deltas) with:
+
+```bash
+python benchmarks/system_profile/summarize_experiment.py /path/to/job-result
+```
+
 Submit a LIBERO experiment from the cluster frontend (override the site-specific Slurm fields):
 
 ```bash
