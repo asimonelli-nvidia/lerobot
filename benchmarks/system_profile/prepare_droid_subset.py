@@ -8,15 +8,11 @@ import argparse
 import json
 import os
 import shutil
-from copy import deepcopy
 from pathlib import Path
 
+import numpy as np
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
-
-from lerobot.datasets.compute_stats import compute_relative_action_stats
-from lerobot.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.utils.constants import ACTION
 
 
 def parse_args() -> argparse.Namespace:
@@ -27,6 +23,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--episodes", type=int, default=100)
     parser.add_argument("--action-horizon", type=int, default=40)
     parser.add_argument("--workers", type=int, default=16)
+    parser.add_argument(
+        "--refresh-stats-only",
+        action="store_true",
+        help="Replace relative-action stats in an already prepared output directory.",
+    )
     return parser.parse_args()
 
 
@@ -57,10 +58,60 @@ def filter_parquet(source: Path, output: Path, episodes: int) -> int:
     return selected.num_rows
 
 
+def compute_horizon_relative_stats(dataset_root: Path, action_horizon: int) -> dict[str, list]:
+    """Compute the horizon-preserving relative stats consumed by GR00T N1.7."""
+    info = json.loads((dataset_root / "meta/info.json").read_text(encoding="utf-8"))
+    table = pq.read_table(dataset_root / "data/chunk-000/file-000.parquet")
+    actions = np.asarray(table["action"].to_pylist(), dtype=np.float32)
+    states = np.asarray(table["observation.state"].to_pylist(), dtype=np.float32)
+    episode_indices = np.asarray(table["episode_index"].to_pylist(), dtype=np.int64)
+    if actions.ndim != 2 or states.ndim != 2 or actions.shape[0] != states.shape[0]:
+        raise ValueError(f"unexpected action/state shapes: {actions.shape}, {states.shape}")
+    if action_horizon <= 0 or len(episode_indices) < action_horizon:
+        raise ValueError(f"invalid action horizon {action_horizon} for {len(episode_indices)} frames")
+
+    starts = np.arange(len(episode_indices) - action_horizon + 1)
+    starts = starts[episode_indices[starts] == episode_indices[starts + action_horizon - 1]]
+    if len(starts) < 2:
+        raise ValueError("fewer than two complete action chunks are available")
+
+    offsets = np.arange(action_horizon)
+    chunks = actions[starts[:, None] + offsets[None, :]].copy()
+    raw_names = info["features"]["action"].get("names")
+    if isinstance(raw_names, dict):
+        raw_names = next((value for value in raw_names.values() if isinstance(value, list)), None)
+    names = list(raw_names or [str(index) for index in range(actions.shape[1])])
+    relative_mask = np.asarray([0.0 if name == "gripper" else 1.0 for name in names], dtype=np.float32)
+    chunks -= states[starts, None, : actions.shape[1]] * relative_mask[None, None, :]
+
+    computed = {
+        "min": np.min(chunks, axis=0),
+        "max": np.max(chunks, axis=0),
+        "mean": np.mean(chunks, axis=0),
+        "std": np.std(chunks, axis=0),
+        "q01": np.quantile(chunks, 0.01, axis=0).astype(np.float32),
+        "q99": np.quantile(chunks, 0.99, axis=0).astype(np.float32),
+        "count": np.full(action_horizon, len(starts), dtype=np.int64),
+    }
+    return {key: value.tolist() for key, value in computed.items()}
+
+
+def write_relative_stats(dataset_root: Path, action_horizon: int) -> None:
+    stats_path = dataset_root / "meta/stats.json"
+    stats = json.loads(stats_path.read_text(encoding="utf-8"))
+    stats["action"] = compute_horizon_relative_stats(dataset_root, action_horizon)
+    write_json(stats_path, stats)
+
+
 def main() -> None:
     args = parse_args()
     if args.output.exists():
+        if args.refresh_stats_only:
+            write_relative_stats(args.output, args.action_horizon)
+            return
         raise FileExistsError(f"output already exists: {args.output}")
+    if args.refresh_stats_only:
+        raise FileNotFoundError(f"output does not exist: {args.output}")
 
     info_path = args.source / "meta/info.json"
     info = json.loads(info_path.read_text(encoding="utf-8"))
@@ -100,31 +151,7 @@ def main() -> None:
     info["splits"] = {"train": f"0:{args.episodes}"}
     write_json(args.output / "meta/info.json", info)
 
-    dataset = LeRobotDataset(
-        args.repo_id,
-        root=args.output,
-        episodes=list(range(args.episodes)),
-        download_videos=False,
-    )
-    stats_features = deepcopy(dataset.meta.features)
-    action_names = stats_features[ACTION].get("names")
-    if isinstance(action_names, dict):
-        flattened_names = next(
-            (value for value in action_names.values() if isinstance(value, list)),
-            None,
-        )
-        stats_features[ACTION]["names"] = flattened_names
-    relative_stats = compute_relative_action_stats(
-        hf_dataset=dataset.hf_dataset,
-        features=stats_features,
-        chunk_size=args.action_horizon,
-        exclude_joints=["gripper"],
-        num_workers=args.workers,
-    )
-    stats_path = args.output / "meta/stats.json"
-    stats = json.loads(stats_path.read_text(encoding="utf-8"))
-    stats[ACTION] = {key: value.tolist() for key, value in relative_stats.items()}
-    write_json(stats_path, stats)
+    write_relative_stats(args.output, args.action_horizon)
     write_json(
         args.output / "meta/benchmark-subset.json",
         {
