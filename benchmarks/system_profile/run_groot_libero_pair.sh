@@ -80,7 +80,7 @@ export WANDB_CONFIG_DIR=${runtime}/wandb-config
 export WANDB_DATA_DIR=${runtime}/wandb-data
 export XDG_CACHE_HOME=${runtime}/cache
 export HOME=${runtime}/home
-export LD_LIBRARY_PATH=${shared_root}/dataloading/ffmpeg7-x86/lib:/home/tools/cuda/cudatoolkit_12.2.1/lib64:${LD_LIBRARY_PATH:-}
+export LD_LIBRARY_PATH=${shared_root}/dataloading/ffmpeg7-x86/lib:${LD_LIBRARY_PATH:-}
 export TRITON_CACHE_DIR=${runtime}/triton
 export TORCHINDUCTOR_CACHE_DIR=${runtime}/torchinductor
 
