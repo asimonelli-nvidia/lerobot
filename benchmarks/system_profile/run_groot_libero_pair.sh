@@ -52,6 +52,7 @@ esac
 
 baseline_sha=${BASELINE_SHA:-223a8ad16c52dad961cc1104477ffc3369c5189a}
 proposal_sha=${PROPOSAL_SHA:-0aa734f39ccdec8e08f7dd070ca21a90284d47b5}
+harness_sha=$(git -C "${repo}" rev-parse HEAD)
 steps=${STEPS:-600}
 warmup_steps=${WARMUP_STEPS:-100}
 repeats=${REPEATS:-3}
@@ -153,6 +154,7 @@ for name, version in packages:
 PY
 git -C "${repo}" show --no-patch --format=fuller "${baseline_sha}" >"${metadata}/baseline-commit.txt"
 git -C "${repo}" show --no-patch --format=fuller "${proposal_sha}" >"${metadata}/proposal-commit.txt"
+git -C "${repo}" show --no-patch --format=fuller "${harness_sha}" >"${metadata}/harness-commit.txt"
 cp "${runtime}/data/${dataset_staged_name}/meta/info.json" "${metadata}/dataset-info.json"
 "${python}" - <<PY >"${metadata}/run-manifest.json"
 import json
@@ -174,6 +176,10 @@ print(json.dumps({
         "baseline_sha": "${baseline_sha}",
         "proposal_sha": "${proposal_sha}",
         "order": "AB/BA/AB",
+    },
+    "harness": {
+        "revision": "${harness_sha}",
+        "entrypoint": "benchmarks/system_profile/run_groot_libero_pair.sh",
     },
     "training": {
         "steps": ${steps},
