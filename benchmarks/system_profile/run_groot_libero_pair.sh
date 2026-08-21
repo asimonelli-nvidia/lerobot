@@ -26,8 +26,8 @@ case ${dataset_profile} in
     )
     ;;
   droid)
-    dataset_source=${DATASET_ROOT:-${shared_root}/dataloading/data/droid_1.0.1_chunk000}
-    dataset_staged_name=droid_1.0.1_chunk000
+    dataset_source=${DATASET_ROOT:-${shared_root}/dataloading/data/droid_1.0.1_first100}
+    dataset_staged_name=droid_1.0.1_first100
     dataset_repo_id=lerobot/droid_1.0.1
     dataset_label=droid
     dataset_subset=episodes-0-99

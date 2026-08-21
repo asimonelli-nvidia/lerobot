@@ -20,6 +20,16 @@ The DROID subset is intended for repeatable system-throughput measurement, not q
 uses the current DROID 1.0.1 schema rather than the older `droid_100` conversion because the latter
 does not contain the state/action fields expected by the current GR00T integration.
 
+Prepare that subset once before timing any DROID run. The script filters both Parquet tables to
+episodes 0–99 and precomputes the 40-step relative-action statistics that would otherwise be
+recomputed before every process:
+
+```bash
+python benchmarks/system_profile/prepare_droid_subset.py \
+  --source=/datasets/droid_1.0.1_chunk000 \
+  --output=/datasets/droid_1.0.1_first100
+```
+
 Every run retains:
 
 - per-step LeRobot metrics and the complete console log;
