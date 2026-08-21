@@ -8,6 +8,7 @@ import argparse
 import json
 import os
 import shutil
+from copy import deepcopy
 from pathlib import Path
 
 import pyarrow.compute as pc
@@ -105,9 +106,17 @@ def main() -> None:
         episodes=list(range(args.episodes)),
         download_videos=False,
     )
+    stats_features = deepcopy(dataset.meta.features)
+    action_names = stats_features[ACTION].get("names")
+    if isinstance(action_names, dict):
+        flattened_names = next(
+            (value for value in action_names.values() if isinstance(value, list)),
+            None,
+        )
+        stats_features[ACTION]["names"] = flattened_names
     relative_stats = compute_relative_action_stats(
         hf_dataset=dataset.hf_dataset,
-        features=dataset.meta.features,
+        features=stats_features,
         chunk_size=args.action_horizon,
         exclude_joints=["gripper"],
         num_workers=args.workers,
