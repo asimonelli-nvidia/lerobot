@@ -11,6 +11,8 @@ time_limit=${TIME_LIMIT:-1-00:00:00}
 cpus_per_task=${CPUS_PER_TASK:-32}
 memory=${MEMORY:-200G}
 exclusive=${EXCLUSIVE:-1}
+system_label=${SYSTEM_LABEL:-h100-pcie}
+dataset_profile=${DATASET_PROFILE:-libero}
 
 exclusive_args=()
 if [[ ${exclusive} == 1 ]]; then
@@ -22,10 +24,10 @@ sbatch --parsable \
   --account="${account}" \
   --partition="${partition}" \
   --qos="${qos}" \
-  --job-name=lerobot-groot-libero \
+  --job-name="groot-${dataset_profile}-${system_label}" \
   --time="${time_limit}" \
   --nodes=1 --ntasks=1 --gres=gpu:1 \
   --cpus-per-task="${cpus_per_task}" --mem="${memory}" "${exclusive_args[@]}" \
   --output="${results}/slurm/slurm-%j.out" \
-  --export="ALL,SHARED_ROOT=${shared_root},REPO_PATH=${repo},RESULTS_ROOT=${results},STEPS=${STEPS:-600},WARMUP_STEPS=${WARMUP_STEPS:-100},REPEATS=${REPEATS:-3},BATCH_SIZE=${BATCH_SIZE:-128},NUM_WORKERS=${NUM_WORKERS:-15}" \
+  --export="ALL,SHARED_ROOT=${shared_root},REPO_PATH=${repo},RESULTS_ROOT=${results},SYSTEM_LABEL=${system_label},DATASET_PROFILE=${dataset_profile},STEPS=${STEPS:-600},WARMUP_STEPS=${WARMUP_STEPS:-100},REPEATS=${REPEATS:-3},BATCH_SIZE=${BATCH_SIZE:-},NUM_WORKERS=${NUM_WORKERS:-15}" \
   "${repo}/benchmarks/system_profile/run_groot_libero_pair.sh"

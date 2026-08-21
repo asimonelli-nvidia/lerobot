@@ -3,23 +3,68 @@ set -euo pipefail
 
 shared_root=${SHARED_ROOT:-/home/scratch.asimonelli_wwfo}
 repo=${REPO_PATH:-${shared_root}/experiments/lerobot-batched-benchmark}
-dataset_source=${DATASET_ROOT:-${shared_root}/dataloading/data/libero_spatial_v21}
 environment=${PYTHON_ENV:-${shared_root}/dataloading/lerobot-batched-pr/.venv}
 model_source=${MODEL_SOURCE:-${shared_root}/v2d/artifacts/models/GR00T-N1.7-3B}
 hf_source=${HF_SOURCE:-${shared_root}/v2d/cache/huggingface}
 results_base=${RESULTS_ROOT:-${shared_root}/experiments/lerobot-batched-benchmark-results}
+system_label=${SYSTEM_LABEL:-unknown-system}
+dataset_profile=${DATASET_PROFILE:-libero}
+
+case ${dataset_profile} in
+  libero)
+    dataset_source=${DATASET_ROOT:-${shared_root}/dataloading/data/libero_spatial_v21}
+    dataset_staged_name=libero_spatial_v21
+    dataset_repo_id=IPEC-COMMUNITY/libero_spatial_no_noops_1.0.0_lerobot
+    dataset_label=libero-spatial
+    dataset_subset=all-432-episodes
+    embodiment_tag=libero_sim
+    batch_size_default=320
+    dataset_args=()
+    policy_profile_args=(
+      --policy.embodiment_tag=libero_sim
+      --policy.use_relative_actions=false
+    )
+    ;;
+  droid)
+    dataset_source=${DATASET_ROOT:-${shared_root}/dataloading/data/droid_1.0.1_chunk000}
+    dataset_staged_name=droid_1.0.1_chunk000
+    dataset_repo_id=lerobot/droid_1.0.1
+    dataset_label=droid
+    dataset_subset=episodes-0-99
+    embodiment_tag=new_embodiment
+    batch_size_default=64
+    droid_episodes=$(seq -s, 0 99)
+    dataset_args=(--dataset.episodes="[${droid_episodes}]")
+    policy_profile_args=(
+      --policy.embodiment_tag=new_embodiment
+      --policy.chunk_size=16
+      --policy.n_action_steps=16
+      --policy.use_relative_actions=true
+      --policy.relative_exclude_joints='["gripper"]'
+      --policy.use_bf16=true
+    )
+    ;;
+  *)
+    echo "unsupported DATASET_PROFILE: ${dataset_profile}" >&2
+    exit 2
+    ;;
+esac
 
 baseline_sha=${BASELINE_SHA:-223a8ad16c52dad961cc1104477ffc3369c5189a}
 proposal_sha=${PROPOSAL_SHA:-0aa734f39ccdec8e08f7dd070ca21a90284d47b5}
 steps=${STEPS:-600}
 warmup_steps=${WARMUP_STEPS:-100}
 repeats=${REPEATS:-3}
-batch_size=${BATCH_SIZE:-128}
+batch_size=${BATCH_SIZE:-${batch_size_default}}
 num_workers=${NUM_WORKERS:-15}
 telemetry_interval_ms=${TELEMETRY_INTERVAL_MS:-250}
 
 job_id=${SLURM_JOB_ID:-manual-$(date -u +%Y%m%dT%H%M%SZ)}
-results_root=${results_base}/h100-libero/${job_id}
+if [[ ! ${system_label} =~ ^[a-z0-9][a-z0-9._-]*$ ]]; then
+  echo "invalid SYSTEM_LABEL: ${system_label}" >&2
+  exit 2
+fi
+results_root=${results_base}/${system_label}-${dataset_label}/${job_id}
 runtime=$(mktemp -d "${SLURM_TMPDIR:-/tmp}/lerobot-batched-${job_id}.XXXXXX")
 mkdir -p \
   "${results_root}" "${runtime}/sources" "${runtime}/data" "${runtime}/hf/hub" \
@@ -48,7 +93,7 @@ for required in \
 done
 
 # Stage immutable inputs once per allocation. Setup time is kept outside every measured run.
-cp -a "${dataset_source}" "${runtime}/data/libero_spatial_v21"
+cp -a "${dataset_source}" "${runtime}/data/${dataset_staged_name}"
 cp -a "${model_source}" "${runtime}/models/GR00T-N1.7-3B"
 for model in models--nvidia--Cosmos-Reason2-2B; do
   if [[ -d ${hf_source}/hub/${model} ]]; then
@@ -108,7 +153,45 @@ for name, version in packages:
 PY
 git -C "${repo}" show --no-patch --format=fuller "${baseline_sha}" >"${metadata}/baseline-commit.txt"
 git -C "${repo}" show --no-patch --format=fuller "${proposal_sha}" >"${metadata}/proposal-commit.txt"
-cp "${runtime}/data/libero_spatial_v21/meta/info.json" "${metadata}/dataset-info.json"
+cp "${runtime}/data/${dataset_staged_name}/meta/info.json" "${metadata}/dataset-info.json"
+"${python}" - <<PY >"${metadata}/run-manifest.json"
+import json
+
+print(json.dumps({
+    "schema_version": "1.0",
+    "target": "training_system_throughput",
+    "system_label": "${system_label}",
+    "dataset": {
+        "repo_id": "${dataset_repo_id}",
+        "profile": "${dataset_profile}",
+        "subset": "${dataset_subset}",
+    },
+    "model": {
+        "id": "nvidia/GR00T-N1.7-3B",
+        "embodiment_tag": "${embodiment_tag}",
+    },
+    "comparison": {
+        "baseline_sha": "${baseline_sha}",
+        "proposal_sha": "${proposal_sha}",
+        "order": "AB/BA/AB",
+    },
+    "training": {
+        "steps": ${steps},
+        "warmup_steps": ${warmup_steps},
+        "repeats": ${repeats},
+        "batch_size_per_gpu": ${batch_size},
+        "num_workers_per_gpu": ${num_workers},
+        "seed": 42,
+        "checkpoints": False,
+        "evaluation": False,
+    },
+    "telemetry": {
+        "gpu_interval_ms": ${telemetry_interval_ms},
+        "system_interval_ms": 500,
+        "wandb_mode": "offline",
+    },
+}, indent=2, sort_keys=True))
+PY
 
 image_transforms='{
   "brightness": {"weight": 1.0, "type": "ColorJitter", "kwargs": {"brightness": [0.7, 1.3]}},
@@ -148,14 +231,16 @@ run_one() {
     --summary "${output_dir}/process-summary.json" \
     --label "${label}" --interval 0.5 -- \
     "${python}" -m lerobot.scripts.lerobot_train \
-      --dataset.repo_id=IPEC-COMMUNITY/libero_spatial_no_noops_1.0.0_lerobot \
-      --dataset.root="${runtime}/data/libero_spatial_v21" \
+      --dataset.repo_id="${dataset_repo_id}" \
+      --dataset.root="${runtime}/data/${dataset_staged_name}" \
       --dataset.revision=main --dataset.video_backend=torchcodec \
+      "${dataset_args[@]}" \
       --dataset.image_transforms.enable=true --dataset.image_transforms.max_num_transforms=4 \
       --dataset.image_transforms.tfs="${image_transforms}" \
       --policy.type=groot --policy.device=cuda \
-      --policy.base_model_path="${runtime}/models/GR00T-N1.7-3B" --policy.embodiment_tag=libero_sim \
-      --policy.push_to_hub=false --policy.use_relative_actions=false --policy.max_steps=20000 \
+      --policy.base_model_path="${runtime}/models/GR00T-N1.7-3B" \
+      "${policy_profile_args[@]}" \
+      --policy.push_to_hub=false --policy.max_steps=20000 \
       --batch_size="${batch_size}" --steps="${steps}" --save_checkpoint=false \
       --env_eval_freq=0 --eval_steps=0 --log_freq=1 \
       --num_workers="${num_workers}" --prefetch_factor=1 --persistent_workers=true \
