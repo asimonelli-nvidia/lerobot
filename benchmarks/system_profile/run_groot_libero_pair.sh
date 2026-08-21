@@ -24,7 +24,7 @@ runtime=$(mktemp -d "${SLURM_TMPDIR:-/tmp}/lerobot-batched-${job_id}.XXXXXX")
 mkdir -p \
   "${results_root}" "${runtime}/sources" "${runtime}/data" "${runtime}/hf/hub" \
   "${runtime}/models" "${runtime}/outputs" "${runtime}/home" "${runtime}/wandb-cache" \
-  "${runtime}/wandb-config" "${runtime}/wandb-data"
+  "${runtime}/wandb-config" "${runtime}/wandb-data" "${runtime}/cache/torch/kernels"
 
 cleanup() {
   if [[ -n ${gpu_monitor_pid:-} ]]; then
@@ -79,7 +79,6 @@ export WANDB_CACHE_DIR=${runtime}/wandb-cache
 export WANDB_CONFIG_DIR=${runtime}/wandb-config
 export WANDB_DATA_DIR=${runtime}/wandb-data
 export XDG_CACHE_HOME=${runtime}/cache
-export HOME=${runtime}/home
 export LD_LIBRARY_PATH=${shared_root}/dataloading/ffmpeg7-x86/lib:${LD_LIBRARY_PATH:-}
 export TRITON_CACHE_DIR=${runtime}/triton
 export TORCHINDUCTOR_CACHE_DIR=${runtime}/torchinductor
@@ -87,6 +86,7 @@ export TORCHINDUCTOR_CACHE_DIR=${runtime}/torchinductor
 metadata=${results_root}/system
 mkdir -p "${metadata}"
 date -u +%FT%TZ >"${metadata}/started_at_utc.txt"
+date +%Z%z >"${metadata}/local-timezone.txt"
 uname -a >"${metadata}/uname.txt"
 lscpu >"${metadata}/lscpu.txt"
 lsblk -O -J >"${metadata}/lsblk.json" 2>/dev/null || true
@@ -94,7 +94,18 @@ mount >"${metadata}/mounts.txt"
 df -hT >"${metadata}/filesystems.txt"
 nvidia-smi -q >"${metadata}/nvidia-smi-q.txt"
 nvidia-smi topo -m >"${metadata}/nvidia-smi-topology.txt" 2>/dev/null || true
-"${python}" -m pip freeze >"${metadata}/pip-freeze.txt" 2>/dev/null || true
+scontrol show job "${SLURM_JOB_ID}" >"${metadata}/slurm-job.txt" 2>/dev/null || true
+"${python}" - <<'PY' >"${metadata}/python-packages.txt"
+from importlib.metadata import distributions
+
+packages = sorted(
+    (name, dist.version)
+    for dist in distributions()
+    if (name := dist.metadata.get("Name")) is not None
+)
+for name, version in packages:
+    print(f"{name}=={version}")
+PY
 git -C "${repo}" show --no-patch --format=fuller "${baseline_sha}" >"${metadata}/baseline-commit.txt"
 git -C "${repo}" show --no-patch --format=fuller "${proposal_sha}" >"${metadata}/proposal-commit.txt"
 cp "${runtime}/data/libero_spatial_v21/meta/info.json" "${metadata}/dataset-info.json"
