@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-shared_root=${SHARED_ROOT:-/home/scratch.asimonelli_wwfo}
+: "${SHARED_ROOT:?Set SHARED_ROOT to the shared benchmark workspace}"
+: "${PARTITION:?Set PARTITION to a one-GPU Slurm partition}"
+: "${ACCOUNT:?Set ACCOUNT to your Slurm account}"
+shared_root=${SHARED_ROOT}
 repo=${REPO_PATH:-${shared_root}/experiments/lerobot-batched-benchmark}
 results=${RESULTS_ROOT:-${shared_root}/experiments/lerobot-batched-benchmark-results}
-partition=${PARTITION:-h100-80gb-hbm3@ts6/mg62g4100/1gpu-32cpu-256gb}
-account=${ACCOUNT:-wwfo-emea_h100-80gb-hbm3}
+partition=${PARTITION}
+account=${ACCOUNT}
 qos=${QOS:-batch}
 time_limit=${TIME_LIMIT:-1-00:00:00}
 cpus_per_task=${CPUS_PER_TASK:-32}

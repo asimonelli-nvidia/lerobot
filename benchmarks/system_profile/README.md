@@ -49,7 +49,7 @@ python benchmarks/system_profile/summarize_experiment.py /path/to/job-result
 Submit a LIBERO experiment from the cluster frontend (override the site-specific Slurm fields):
 
 ```bash
-SYSTEM_LABEL=h200 DATASET_PROFILE=libero \
+SHARED_ROOT=/path/to/shared-workspace SYSTEM_LABEL=h200 DATASET_PROFILE=libero \
 PARTITION=<partition> ACCOUNT=<account> CPUS_PER_TASK=32 MEMORY=220G \
   benchmarks/system_profile/submit_h100.sh
 ```
@@ -57,7 +57,7 @@ PARTITION=<partition> ACCOUNT=<account> CPUS_PER_TASK=32 MEMORY=220G \
 Run the DROID profile with the same system allocation:
 
 ```bash
-SYSTEM_LABEL=h200 DATASET_PROFILE=droid \
+SHARED_ROOT=/path/to/shared-workspace SYSTEM_LABEL=h200 DATASET_PROFILE=droid \
 PARTITION=<partition> ACCOUNT=<account> CPUS_PER_TASK=32 MEMORY=220G \
   benchmarks/system_profile/submit_h100.sh
 ```
@@ -65,6 +65,7 @@ PARTITION=<partition> ACCOUNT=<account> CPUS_PER_TASK=32 MEMORY=220G \
 For a validation run before the full experiment:
 
 ```bash
+SHARED_ROOT=/path/to/shared-workspace PARTITION=<partition> ACCOUNT=<account> \
 STEPS=20 WARMUP_STEPS=5 REPEATS=1 TIME_LIMIT=00:30:00 QOS=batch-short \
   benchmarks/system_profile/submit_h100.sh
 ```

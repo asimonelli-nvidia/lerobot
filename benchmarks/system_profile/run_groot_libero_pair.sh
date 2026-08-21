@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-shared_root=${SHARED_ROOT:-/home/scratch.asimonelli_wwfo}
+: "${SHARED_ROOT:?Set SHARED_ROOT to the shared benchmark workspace}"
+shared_root=${SHARED_ROOT}
 repo=${REPO_PATH:-${shared_root}/experiments/lerobot-batched-benchmark}
 environment=${PYTHON_ENV:-${shared_root}/dataloading/lerobot-batched-pr/.venv}
 model_source=${MODEL_SOURCE:-${shared_root}/v2d/artifacts/models/GR00T-N1.7-3B}
