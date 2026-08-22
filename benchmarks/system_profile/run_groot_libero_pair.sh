@@ -69,6 +69,7 @@ case ${model_profile} in
     model_id=lerobot/diffusion-resnet18
     model_label=diffusion-resnet18
     embodiment_tag=dataset-native
+    metadata_video_layout=chw-normalized
     if [[ ${dataset_profile} == droid ]]; then
       horizon=16
       action_steps=8
@@ -91,6 +92,7 @@ case ${model_profile} in
     exit 2
     ;;
 esac
+metadata_video_layout=${metadata_video_layout:-source}
 
 baseline_sha=${BASELINE_SHA:-223a8ad16c52dad961cc1104477ffc3369c5189a}
 proposal_sha=${PROPOSAL_SHA:-0aa734f39ccdec8e08f7dd070ca21a90284d47b5}
@@ -144,6 +146,20 @@ fi
 
 # Stage immutable inputs once per allocation. Setup time is kept outside every measured run.
 cp -a "${dataset_source}" "${runtime}/data/${dataset_staged_name}"
+if [[ ${model_profile} == diffusion ]]; then
+  "${python}" - <<PY
+import json
+from pathlib import Path
+
+path = Path("${runtime}/data/${dataset_staged_name}/meta/info.json")
+info = json.loads(path.read_text())
+for feature in info["features"].values():
+    shape = feature.get("shape")
+    if feature.get("dtype") == "video" and len(shape or []) == 3 and shape[-1] in (1, 3, 4):
+        feature["shape"] = [shape[-1], shape[0], shape[1]]
+path.write_text(json.dumps(info, indent=4) + "\n")
+PY
+fi
 if [[ ${model_profile} == groot ]]; then
   cp -a "${model_source}" "${runtime}/models/GR00T-N1.7-3B"
   for model in models--nvidia--Cosmos-Reason2-2B; do
@@ -224,6 +240,7 @@ print(json.dumps({
         "repo_id": "${dataset_repo_id}",
         "profile": "${dataset_profile}",
         "subset": "${dataset_subset}",
+        "metadata_video_layout": "${metadata_video_layout}",
     },
     "model": {
         "id": "${model_id}",

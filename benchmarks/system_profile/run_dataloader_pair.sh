@@ -30,8 +30,8 @@ case ${dataset_profile} in
 esac
 
 case ${model_profile} in
-  groot) model_id=nvidia/GR00T-N1.7-3B ;;
-  diffusion) model_id=lerobot/diffusion-resnet18 ;;
+  groot) model_id=nvidia/GR00T-N1.7-3B; metadata_video_layout=source ;;
+  diffusion) model_id=lerobot/diffusion-resnet18; metadata_video_layout=chw-normalized ;;
   *) echo "unsupported MODEL_PROFILE: ${model_profile}" >&2; exit 2 ;;
 esac
 
@@ -80,6 +80,20 @@ if [[ ${model_profile} == groot && ! -d ${model_source} ]]; then
 fi
 
 cp -a "${dataset_source}" "${runtime}/data/${dataset_staged_name}"
+if [[ ${model_profile} == diffusion ]]; then
+  "${python}" - <<PY
+import json
+from pathlib import Path
+
+path = Path("${runtime}/data/${dataset_staged_name}/meta/info.json")
+info = json.loads(path.read_text())
+for feature in info["features"].values():
+    shape = feature.get("shape")
+    if feature.get("dtype") == "video" and len(shape or []) == 3 and shape[-1] in (1, 3, 4):
+        feature["shape"] = [shape[-1], shape[0], shape[1]]
+path.write_text(json.dumps(info, indent=4) + "\n")
+PY
+fi
 if [[ ${model_profile} == groot ]]; then
   cp -a "${model_source}" "${runtime}/models/GR00T-N1.7-3B"
 fi
@@ -113,7 +127,8 @@ git -C "${repo}" show --no-patch --format=fuller "${harness_sha}" >"${metadata}/
 import json
 print(json.dumps({
   "schema_version": "1.0", "target": "dataloading", "system_label": "${system_label}",
-  "dataset": {"repo_id": "${dataset_repo_id}", "profile": "${dataset_profile}", "subset": "${dataset_subset}"},
+  "dataset": {"repo_id": "${dataset_repo_id}", "profile": "${dataset_profile}", "subset": "${dataset_subset}",
+              "metadata_video_layout": "${metadata_video_layout}"},
   "model": {"id": "${model_id}", "profile": "${model_profile}"},
   "comparison": {"baseline_sha": "${baseline_sha}", "proposal_sha": "${proposal_sha}", "order": "AB/BA/AB"},
   "harness": {"revision": "${harness_sha}", "entrypoint": "benchmarks/system_profile/run_dataloader_pair.sh"},
