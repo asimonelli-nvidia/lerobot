@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+ulimit -c 0
 
 : "${SHARED_ROOT:?Set SHARED_ROOT to the shared benchmark workspace}"
 shared_root=${SHARED_ROOT}
