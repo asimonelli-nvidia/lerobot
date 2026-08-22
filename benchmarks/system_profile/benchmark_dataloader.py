@@ -281,6 +281,8 @@ def main() -> None:
             shutdown_workers()
         except Exception as error:  # noqa: BLE001 - retain completed evidence on cleanup failure
             print(f"warning: DataLoader cleanup after completed measurement: {error}", flush=True)
+            result["cleanup"] = {"status": "error", "message": str(error)}
+            args.summary.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     del iterator, loader
     gc.collect()
 
