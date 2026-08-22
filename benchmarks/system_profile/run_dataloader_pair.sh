@@ -44,6 +44,10 @@ case ${model_profile} in
     ;;
   *) echo "unsupported MODEL_PROFILE: ${model_profile}" >&2; exit 2 ;;
 esac
+stats_adjustment=none
+if [[ ${model_profile} == smolvla && ${dataset_profile} == droid ]]; then
+  stats_adjustment=repeat-last-temporal-action-stat-to-50
+fi
 
 baseline_sha=${BASELINE_SHA:-223a8ad16c52dad961cc1104477ffc3369c5189a}
 proposal_sha=${PROPOSAL_SHA:-0aa734f39ccdec8e08f7dd070ca21a90284d47b5}
@@ -121,6 +125,13 @@ if "${model_profile}" == "diffusion":
         if isinstance(values, list) and len(values) > ${diffusion_horizon:-0}:
             stats["action"][name] = values[:${diffusion_horizon:-0}]
     stats_path.write_text(json.dumps(stats, indent=4) + "\n")
+elif "${model_profile}" == "smolvla" and "${dataset_profile}" == "droid":
+    stats_path = path.with_name("stats.json")
+    stats = json.loads(stats_path.read_text())
+    for name, values in stats.get("action", {}).items():
+        if isinstance(values, list) and values and len(values) < 50:
+            stats["action"][name] = values + [values[-1]] * (50 - len(values))
+    stats_path.write_text(json.dumps(stats, indent=4) + "\n")
 PY
 fi
 if [[ ${model_profile} == groot ]]; then
@@ -157,7 +168,7 @@ import json
 print(json.dumps({
   "schema_version": "1.0", "target": "dataloading", "system_label": "${system_label}",
   "dataset": {"repo_id": "${dataset_repo_id}", "profile": "${dataset_profile}", "subset": "${dataset_subset}",
-              "metadata_video_layout": "${metadata_video_layout}"},
+              "metadata_video_layout": "${metadata_video_layout}", "stats_adjustment": "${stats_adjustment}"},
   "model": {"id": "${model_id}", "profile": "${model_profile}",
             "initialization": "pretrained SmolVLM2 backbone + dataset-native action expert" if "${model_profile}" == "smolvla" else "model default"},
   "comparison": {"baseline_sha": "${baseline_sha}", "proposal_sha": "${proposal_sha}",

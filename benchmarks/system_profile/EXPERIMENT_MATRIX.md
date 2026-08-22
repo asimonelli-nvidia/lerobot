@@ -47,6 +47,11 @@ or higher batches to lock the largest stable shared fit for baseline and proposa
 dataset. Reportable SmolVLA jobs use the same 600/100-step training window and 300/50-batch loader
 window after that fit is locked.
 
+The local DROID subset stores temporal action normalization statistics for 40 offsets. SmolVLA's
+default 50-step horizon extends the staged copy by repeating the final recorded offset for positions
+41–50. The source dataset is never modified, and the adjustment is explicit in every run manifest.
+This matrix targets system efficiency rather than model-quality comparison.
+
 | SmolVLA cell | L40 | H100 SXM | H200 |
 | --- | --- | --- | --- |
 | LIBERO | calibrate from 64 | calibrate from 64 | calibrate from 64 |
