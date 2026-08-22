@@ -212,7 +212,7 @@ uname -a >"${metadata}/uname.txt"
 lscpu >"${metadata}/lscpu.txt"
 lsblk -O -J >"${metadata}/lsblk.json" 2>/dev/null || true
 mount >"${metadata}/mounts.txt"
-df -hT >"${metadata}/filesystems.txt"
+df -hT >"${metadata}/filesystems.txt" 2>&1 || true
 nvidia-smi -q >"${metadata}/nvidia-smi-q.txt"
 nvidia-smi topo -m >"${metadata}/nvidia-smi-topology.txt" 2>/dev/null || true
 scontrol show job "${SLURM_JOB_ID}" >"${metadata}/slurm-job.txt" 2>/dev/null || true
