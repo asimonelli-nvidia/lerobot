@@ -11,6 +11,7 @@ backend, multiprocessing context, and batching path as training.
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import math
 import statistics
@@ -246,6 +247,14 @@ def main() -> None:
     waits = [float(row["batch_wait_s"]) for row in rows]
     total_samples = sum(int(row["batch_size"]) for row in rows)
     total_wait = sum(waits)
+    # Explicitly stop persistent workers before this short benchmark process exits.
+    # On shared Slurm nodes, leaving shutdown to interpreter finalization can race
+    # with the next paired run and invalidate multiprocessing semaphores.
+    shutdown_workers = getattr(iterator, "_shutdown_workers", None)
+    if callable(shutdown_workers):
+        shutdown_workers()
+    del iterator, loader
+    gc.collect()
     result = {
         "schema_version": "1.0",
         "target": "dataloading",

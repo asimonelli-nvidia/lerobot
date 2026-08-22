@@ -363,6 +363,7 @@ for ((repeat = 0; repeat < repeats; repeat++)); do
   order=${orders[repeat % ${#orders[@]}]}
   for implementation in ${order}; do
     run_one "${implementation}" "${repeat}"
+    sleep "${RUN_SETTLE_SECONDS:-2}"
   done
 done
 

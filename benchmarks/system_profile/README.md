@@ -1,77 +1,31 @@
-# GR00T system-throughput benchmark
+# LeRobot system benchmark
 
-This harness compares LeRobot `main` with the batched-dataset proposal while holding the model,
-dataset, seed, training recipe, software environment, GPU allocation, CPU allocation, and local
-data placement constant.
+This harness turns matched LeRobot runs into reproducible system evidence. It compares:
 
-The default experiment performs three paired repeats. Each run trains GR00T N1.7 for 600 steps;
-the first 100 steps are retained as raw data but excluded from the steady-state summary. The repeat
-order is AB/BA/AB to reduce cache and ordering bias. Inputs are staged to node-local storage once,
-outside the measured runs.
+- baseline: LeRobot `main` at `223a8ad16c52dad961cc1104477ffc3369c5189a`;
+- proposal: `0aa734f39ccdec8e08f7dd070ca21a90284d47b5`, the GitHub copy of NVIDIA GitLab commit `86da6a090952845c4312165ee3cd6c9d00489e14`.
 
-Two recipe profiles are supported:
+The two proposal commits have the same stable patch ID, `0c7c0504f9c49eac1df1d3fedeea3b5c2028a81a`, across the same five files. Only the base repository differs.
 
-| Profile | Dataset | Deterministic scope | GR00T setup | Recipe batch |
-| --- | --- | --- | --- | ---: |
-| `libero` | LIBERO Spatial | all 432 episodes | `libero_sim`, 40-step action horizon | 320 |
-| `droid` | DROID 1.0.1 | episodes 0–99 from the current full-schema dataset | `new_embodiment`, 16-step action horizon | 64 |
+## Targets
 
-The DROID subset is intended for repeatable system-throughput measurement, not quality claims. It
-uses the current DROID 1.0.1 schema rather than the older `droid_100` conversion because the latter
-does not contain the state/action fields expected by the current GR00T integration.
+| Target | Primary metric | Supporting evidence |
+| --- | --- | --- |
+| Dataloading | loader samples/s | batch-wait p50/p95, CPU seconds/sample, process RSS, grouping opportunity |
+| Training throughput | steps/s | samples/s, combined dataloading time, model-update time, GPU busy, memory, power |
 
-Prepare that subset once before timing any DROID run. The script filters both Parquet tables to
-episodes 0–99 and precomputes the 40-step relative-action statistics that would otherwise be
-recomputed before every process:
+The isolated dataloading target is where the batched reader can be attributed directly. End-to-end training may show a smaller difference when model work is the bottleneck.
 
-```bash
-python benchmarks/system_profile/prepare_droid_subset.py \
-  --source=/datasets/droid_1.0.1_chunk000 \
-  --output=/datasets/droid_1.0.1_first100
-```
+## Matrix
 
-Every run retains:
+The current matrix covers LIBERO Spatial and a deterministic 100-episode DROID 1.0.1 subset; GR00T N1.7 and LeRobot Diffusion Policy with a ResNet-18 backbone; and one NVIDIA L40, H100 SXM, or H200 with 32 allocated CPU cores per measured GPU.
 
-- per-step LeRobot metrics and the complete console log;
-- an offline W&B run containing the configuration and training history;
-- 250 ms GPU utilization, decoder utilization, memory, power, temperature, and clock samples;
-- 500 ms process-tree CPU, memory, I/O, context-switch, host memory, disk, and network samples;
-- hardware, filesystem, package, dataset, and exact Git commit metadata;
-- a compact JSON summary with distribution statistics after the warm-up window.
+Each benchmark uses three paired repeats in AB/BA/AB order. Training runs 600 steps and excludes the first 100. Dataloading runs 300 batches per repeat, excludes the first 50, and sweeps 4, 8, and 15 workers. Data and model assets are staged to node-local storage before measurement. Capacity and stability calibration is separate from reportable evidence; a failed fit is followed by a smaller batch or worker count rather than being treated as a completed benchmark.
 
-Once every paired repeat is complete, create the experiment-level result (including paired
-proposal-vs-baseline throughput deltas) with:
+Exact fit recipes and run status are recorded in [EXPERIMENT_MATRIX.md](EXPERIMENT_MATRIX.md).
 
-```bash
-python benchmarks/system_profile/summarize_experiment.py /path/to/job-result
-```
+## Evidence retained
 
-Submit a LIBERO experiment from the cluster frontend (override the site-specific Slurm fields):
+Every training run keeps per-step logs, offline W&B history, 250 ms GPU telemetry, 500 ms process and host telemetry, system and filesystem metadata, exact revisions, failures, and compact summaries. Loader runs retain the same system evidence plus per-batch timing and grouping metrics. The experiment-card importer keeps all raw artifacts and chooses only target-critical metrics for the card.
 
-```bash
-SHARED_ROOT=/path/to/shared-workspace SYSTEM_LABEL=h200 DATASET_PROFILE=libero \
-PARTITION=<partition> ACCOUNT=<account> CPUS_PER_TASK=32 MEMORY=220G \
-  benchmarks/system_profile/submit_h100.sh
-```
-
-Run the DROID profile with the same system allocation:
-
-```bash
-SHARED_ROOT=/path/to/shared-workspace SYSTEM_LABEL=h200 DATASET_PROFILE=droid \
-PARTITION=<partition> ACCOUNT=<account> CPUS_PER_TASK=32 MEMORY=220G \
-  benchmarks/system_profile/submit_h100.sh
-```
-
-For a validation run before the full experiment:
-
-```bash
-SHARED_ROOT=/path/to/shared-workspace PARTITION=<partition> ACCOUNT=<account> \
-STEPS=20 WARMUP_STEPS=5 REPEATS=1 TIME_LIMIT=00:30:00 QOS=batch-short \
-  benchmarks/system_profile/submit_h100.sh
-```
-
-The validation run is not a benchmark result. Its only purpose is to verify the environment,
-dataset, model cache, and command before reserving the GPU for the full paired experiment.
-
-The agent-facing entrypoint is `skills/physical-ai-experiments/SKILL.md`. It defines the target,
-fairness, evidence-retention, comparison, and sharing rules that wrap this harness.
+Use `submit_matrix_job.sh` as the cluster entrypoint. It accepts `TARGET=training` or `TARGET=dataloading`; loader-specific aliases such as `LOADER_WORKERS=4:8:15` are supported. The agent-facing workflow and comparison guardrails live in `skills/physical-ai-experiments/SKILL.md`.

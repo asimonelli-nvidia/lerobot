@@ -199,6 +199,9 @@ for workers in ${worker_counts}; do
   for ((repeat = 0; repeat < repeats; repeat++)); do
     for implementation in ${orders[repeat % ${#orders[@]}]}; do
       run_one "${workers}" "${implementation}" "${repeat}"
+      # Let Python's multiprocessing resource tracker finish before another
+      # spawn-based DataLoader is created in the same allocation.
+      sleep "${RUN_SETTLE_SECONDS:-2}"
     done
   done
 done
