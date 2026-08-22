@@ -38,6 +38,10 @@ case ${model_profile} in
     diffusion_horizon=16
     [[ ${dataset_profile} == libero ]] && diffusion_horizon=32
     ;;
+  smolvla)
+    model_id=lerobot/smolvla_base
+    metadata_video_layout=hwc-with-channel-axis
+    ;;
   *) echo "unsupported MODEL_PROFILE: ${model_profile}" >&2; exit 2 ;;
 esac
 
@@ -87,7 +91,7 @@ if [[ ${model_profile} == groot && ! -d ${model_source} ]]; then
 fi
 
 cp -a "${dataset_source}" "${runtime}/data/${dataset_staged_name}"
-if [[ ${model_profile} == diffusion ]]; then
+if [[ ${model_profile} == diffusion || ${model_profile} == smolvla ]]; then
   "${python}" - <<PY
 import json
 from pathlib import Path
@@ -101,12 +105,13 @@ for feature in info["features"].values():
         names[-1] = "channel"
         feature["names"] = names
 path.write_text(json.dumps(info, indent=4) + "\n")
-stats_path = path.with_name("stats.json")
-stats = json.loads(stats_path.read_text())
-for name, values in stats.get("action", {}).items():
-    if isinstance(values, list) and len(values) > ${diffusion_horizon}:
-        stats["action"][name] = values[:${diffusion_horizon}]
-stats_path.write_text(json.dumps(stats, indent=4) + "\n")
+if "${model_profile}" == "diffusion":
+    stats_path = path.with_name("stats.json")
+    stats = json.loads(stats_path.read_text())
+    for name, values in stats.get("action", {}).items():
+        if isinstance(values, list) and len(values) > ${diffusion_horizon:-0}:
+            stats["action"][name] = values[:${diffusion_horizon:-0}]
+    stats_path.write_text(json.dumps(stats, indent=4) + "\n")
 PY
 fi
 if [[ ${model_profile} == groot ]]; then
@@ -144,7 +149,8 @@ print(json.dumps({
   "schema_version": "1.0", "target": "dataloading", "system_label": "${system_label}",
   "dataset": {"repo_id": "${dataset_repo_id}", "profile": "${dataset_profile}", "subset": "${dataset_subset}",
               "metadata_video_layout": "${metadata_video_layout}"},
-  "model": {"id": "${model_id}", "profile": "${model_profile}"},
+  "model": {"id": "${model_id}", "profile": "${model_profile}",
+            "initialization": "pretrained SmolVLM2 backbone + dataset-native action expert" if "${model_profile}" == "smolvla" else "model default"},
   "comparison": {"baseline_sha": "${baseline_sha}", "proposal_sha": "${proposal_sha}",
                  "proposal_patch_id": "${proposal_patch_id}", "order": "AB/BA/AB"},
   "harness": {"revision": "${harness_sha}", "entrypoint": "benchmarks/system_profile/run_dataloader_pair.sh"},

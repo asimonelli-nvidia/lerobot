@@ -20,19 +20,37 @@ commit. The paired source therefore changes only the five dataset-reader patch f
 | Training throughput | 600 steps | 3, AB/BA/AB | 100 steps | Model steps/s |
 
 Both sides use the same dataset subset, model, precision, batch, workers, CPU allocation, node-local
-data, transforms, sampler, backend, and seed. Every measured GPU receives 32 CPU cores. Loader runs
-sweep 4, 8, and 15 workers and select one shared worker count that maximizes the slower side.
+data, transforms, sampler, backend, and seed. Every measured GPU receives 32 CPU cores. Loader worker
+counts are calibrated jointly and one shared count maximizes the slower side. Affordable recipes keep
+the complete 4/8/15-worker sweep; large-batch recipes use a short sweep followed by full paired repeats
+at the selected count.
 
 ## Training recipes
 
 | System | GR00T · LIBERO | GR00T · DROID | Diffusion · LIBERO | Diffusion · DROID |
 | --- | ---: | ---: | ---: | ---: |
-| NVIDIA L40 | 64 · 15 workers | 32 · 15 workers | calibrating 192 | calibrating 32 / 64 / 128 |
+| NVIDIA L40 | 64 · 15 workers | 32 · 15 workers | 256 · 15 workers | 64 · 15 workers |
 | NVIDIA H100 SXM | 128 · 15 workers | 64 · 15 workers | 384 · 15 workers | 32 · 15 workers |
-| NVIDIA H200 | 320 · 15 workers | 64 · 15 workers | 512 · 15 workers | 64 · 15 workers |
+| NVIDIA H200 | 320 · 15 workers | 64 · 8 workers | 512 · 15 workers | 64 · 15 workers |
 
 Values are per-GPU batch followed by training worker count. Diffusion Policy uses a ResNet-18
 backbone in FP32; GR00T N1.7 uses BF16. LIBERO Diffusion uses action horizon 32 and DROID uses 16.
+The H200 GR00T LIBERO run uses 400 total steps with 100 warm-up steps to fit the cluster's eight-hour
+job limit; its 300 measured steps still meet the reportable window. H200 GR00T on DROID uses eight
+workers because repeated 15-worker attempts exposed shared-node semaphore pressure; both code
+revisions use the same adjusted recipe.
+
+SmolVLA is the third model family. Its recipe uses the pretrained SmolVLM2-500M backbone and a
+dataset-native action expert, matching LeRobot's documented LIBERO training path. It uses BF16 and
+an action horizon of 50 on both datasets. Capacity calibration starts at batch 64, then probes lower
+or higher batches to lock the largest stable shared fit for baseline and proposal on each system and
+dataset. Reportable SmolVLA jobs use the same 600/100-step training window and 300/50-batch loader
+window after that fit is locked.
+
+| SmolVLA cell | L40 | H100 SXM | H200 |
+| --- | --- | --- | --- |
+| LIBERO | calibrate from 64 | calibrate from 64 | calibrate from 64 |
+| DROID | calibrate from 64 | calibrate from 64 | calibrate from 64 |
 
 ## Interpretation
 

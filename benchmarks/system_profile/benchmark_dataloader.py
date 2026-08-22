@@ -29,6 +29,7 @@ from lerobot.datasets.factory import make_train_eval_datasets
 from lerobot.datasets.sampler import EpisodeAwareSampler
 from lerobot.policies.diffusion.configuration_diffusion import DiffusionConfig
 from lerobot.policies.groot.configuration_groot import GrootConfig
+from lerobot.policies.smolvla.configuration_smolvla import SmolVLAConfig
 from lerobot.transforms import ImageTransformsConfig
 
 
@@ -37,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset-profile", choices=("droid", "libero"), required=True)
     parser.add_argument("--dataset-root", type=Path, required=True)
     parser.add_argument("--dataset-repo-id", required=True)
-    parser.add_argument("--model-profile", choices=("groot", "diffusion"), required=True)
+    parser.add_argument("--model-profile", choices=("groot", "diffusion", "smolvla"), required=True)
     parser.add_argument("--model-path", type=Path)
     parser.add_argument("--batch-size", type=int, required=True)
     parser.add_argument("--num-workers", type=int, required=True)
@@ -91,6 +92,14 @@ def make_policy_config(args: argparse.Namespace):
             n_action_steps=16 if args.dataset_profile == "droid" else 40,
             use_relative_actions=args.dataset_profile == "droid",
             relative_exclude_joints=["gripper"] if args.dataset_profile == "droid" else [],
+            push_to_hub=False,
+        )
+    if args.model_profile == "smolvla":
+        return SmolVLAConfig(
+            device="cuda",
+            chunk_size=50,
+            n_action_steps=50,
+            load_vlm_weights=True,
             push_to_hub=False,
         )
     horizon = 16 if args.dataset_profile == "droid" else 32

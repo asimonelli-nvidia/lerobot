@@ -88,6 +88,17 @@ case ${model_profile} in
       --policy.push_to_hub=false
     )
     ;;
+  smolvla)
+    model_id=lerobot/smolvla_base
+    model_label=smolvla-450m
+    embodiment_tag=dataset-native
+    metadata_video_layout=hwc-with-channel-axis
+    policy_args=(
+      --policy.type=smolvla --policy.device=cuda
+      --policy.load_vlm_weights=true
+      --policy.push_to_hub=false
+    )
+    ;;
   *)
     echo "unsupported MODEL_PROFILE: ${model_profile}" >&2
     exit 2
@@ -148,7 +159,7 @@ fi
 
 # Stage immutable inputs once per allocation. Setup time is kept outside every measured run.
 cp -a "${dataset_source}" "${runtime}/data/${dataset_staged_name}"
-if [[ ${model_profile} == diffusion ]]; then
+if [[ ${model_profile} == diffusion || ${model_profile} == smolvla ]]; then
   "${python}" - <<PY
 import json
 from pathlib import Path
@@ -162,12 +173,13 @@ for feature in info["features"].values():
         names[-1] = "channel"
         feature["names"] = names
 path.write_text(json.dumps(info, indent=4) + "\n")
-stats_path = path.with_name("stats.json")
-stats = json.loads(stats_path.read_text())
-for name, values in stats.get("action", {}).items():
-    if isinstance(values, list) and len(values) > ${horizon}:
-        stats["action"][name] = values[:${horizon}]
-stats_path.write_text(json.dumps(stats, indent=4) + "\n")
+if "${model_profile}" == "diffusion":
+    stats_path = path.with_name("stats.json")
+    stats = json.loads(stats_path.read_text())
+    for name, values in stats.get("action", {}).items():
+        if isinstance(values, list) and len(values) > ${horizon:-0}:
+            stats["action"][name] = values[:${horizon:-0}]
+    stats_path.write_text(json.dumps(stats, indent=4) + "\n")
 PY
 fi
 if [[ ${model_profile} == groot ]]; then
@@ -182,6 +194,14 @@ if [[ ${model_profile} == groot ]]; then
       policy_args[i]="--policy.base_model_path=${runtime}/models/GR00T-N1.7-3B"
     fi
   done
+fi
+if [[ ${model_profile} == smolvla ]]; then
+  smolvla_hf_source=${SMOLVLA_HF_SOURCE:-${shared_root}/experiments/smolvla-assets/huggingface}
+  if [[ ! -d ${smolvla_hf_source}/hub/models--HuggingFaceTB--SmolVLM2-500M-Video-Instruct ]]; then
+    echo "missing staged SmolVLA backbone: ${smolvla_hf_source}" >&2
+    exit 2
+  fi
+  cp -a "${smolvla_hf_source}/hub/models--HuggingFaceTB--SmolVLM2-500M-Video-Instruct" "${runtime}/hf/hub/"
 fi
 
 for entry in "baseline:${baseline_sha}" "proposal:${proposal_sha}"; do
@@ -256,6 +276,7 @@ print(json.dumps({
         "id": "${model_id}",
         "profile": "${model_profile}",
         "embodiment_tag": "${embodiment_tag}",
+        "initialization": "pretrained SmolVLM2 backbone + dataset-native action expert" if "${model_profile}" == "smolvla" else "model default",
     },
     "comparison": {
         "baseline_sha": "${baseline_sha}",
