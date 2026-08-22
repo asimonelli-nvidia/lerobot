@@ -11,10 +11,11 @@ backend, multiprocessing context, and batching path as training.
 from __future__ import annotations
 
 import argparse
-import gc
 import json
 import math
+import os
 import statistics
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -283,8 +284,15 @@ def main() -> None:
             print(f"warning: DataLoader cleanup after completed measurement: {error}", flush=True)
             result["cleanup"] = {"status": "error", "message": str(error)}
             args.summary.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    del iterator, loader
-    gc.collect()
+
+    # Some TorchCodec worker processes abort during interpreter finalization even
+    # after ``_shutdown_workers`` returned. The benchmark is an isolated child
+    # process and all reportable artifacts are durable at this point, so bypass
+    # a second implicit DataLoader teardown. The parent monitor still records a
+    # normal exit and writes its process summary.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
 
 
 if __name__ == "__main__":
