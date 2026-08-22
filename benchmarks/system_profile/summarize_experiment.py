@@ -41,9 +41,13 @@ def metric(summary: dict[str, Any], group: str, name: str, statistic: str = "mea
     if group == "training":
         value = summary["training"]["metrics"][name][statistic]
     elif group == "gpu":
-        value = summary["gpu"]["steady_state"]["metrics"][name][statistic]
+        steady = summary["gpu"]["steady_state"]["metrics"]
+        full_run = summary["gpu"]["full_run"]["metrics"]
+        value = (steady.get(name) or full_run[name])[statistic]
     else:
-        value = summary["system"]["steady_state"][name][statistic]
+        steady = summary["system"]["steady_state"]
+        full_run = summary["system"]["full_run"]
+        value = (steady.get(name) or full_run[name])[statistic]
     return float(value)
 
 
@@ -87,9 +91,7 @@ def main() -> None:
         exit_code_path = run_dir / "exit-code.txt"
         if not exit_code_path.is_file() or int(exit_code_path.read_text().strip()) != 0:
             continue
-        by_implementation.setdefault(implementation, {})[repeat] = summarize_run(
-            read_json(path), batch_size
-        )
+        by_implementation.setdefault(implementation, {})[repeat] = summarize_run(read_json(path), batch_size)
 
     aggregate: dict[str, Any] = {}
     for implementation, repeats in by_implementation.items():
