@@ -69,7 +69,7 @@ case ${model_profile} in
     model_id=lerobot/diffusion-resnet18
     model_label=diffusion-resnet18
     embodiment_tag=dataset-native
-    metadata_video_layout=chw-normalized
+    metadata_video_layout=hwc-with-channel-axis
     if [[ ${dataset_profile} == droid ]]; then
       horizon=16
       action_steps=8
@@ -156,7 +156,9 @@ info = json.loads(path.read_text())
 for feature in info["features"].values():
     shape = feature.get("shape")
     if feature.get("dtype") == "video" and len(shape or []) == 3 and shape[-1] in (1, 3, 4):
-        feature["shape"] = [shape[-1], shape[0], shape[1]]
+        names = list(feature.get("names") or ["height", "width", "channel"])
+        names[-1] = "channel"
+        feature["names"] = names
 path.write_text(json.dumps(info, indent=4) + "\n")
 PY
 fi
