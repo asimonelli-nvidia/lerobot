@@ -31,7 +31,12 @@ esac
 
 case ${model_profile} in
   groot) model_id=nvidia/GR00T-N1.7-3B; metadata_video_layout=source ;;
-  diffusion) model_id=lerobot/diffusion-resnet18; metadata_video_layout=hwc-with-channel-axis ;;
+  diffusion)
+    model_id=lerobot/diffusion-resnet18
+    metadata_video_layout=hwc-with-channel-axis
+    diffusion_horizon=16
+    [[ ${dataset_profile} == libero ]] && diffusion_horizon=32
+    ;;
   *) echo "unsupported MODEL_PROFILE: ${model_profile}" >&2; exit 2 ;;
 esac
 
@@ -94,6 +99,12 @@ for feature in info["features"].values():
         names[-1] = "channel"
         feature["names"] = names
 path.write_text(json.dumps(info, indent=4) + "\n")
+stats_path = path.with_name("stats.json")
+stats = json.loads(stats_path.read_text())
+for name, values in stats.get("action", {}).items():
+    if isinstance(values, list) and len(values) > ${diffusion_horizon}:
+        stats["action"][name] = values[:${diffusion_horizon}]
+stats_path.write_text(json.dumps(stats, indent=4) + "\n")
 PY
 fi
 if [[ ${model_profile} == groot ]]; then

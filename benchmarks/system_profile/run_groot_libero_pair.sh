@@ -160,6 +160,12 @@ for feature in info["features"].values():
         names[-1] = "channel"
         feature["names"] = names
 path.write_text(json.dumps(info, indent=4) + "\n")
+stats_path = path.with_name("stats.json")
+stats = json.loads(stats_path.read_text())
+for name, values in stats.get("action", {}).items():
+    if isinstance(values, list) and len(values) > ${horizon}:
+        stats["action"][name] = values[:${horizon}]
+stats_path.write_text(json.dumps(stats, indent=4) + "\n")
 PY
 fi
 if [[ ${model_profile} == groot ]]; then
