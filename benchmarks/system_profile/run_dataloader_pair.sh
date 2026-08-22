@@ -188,6 +188,20 @@ run_one() {
   status=$?
   set -e
   kill "${gpu_monitor_pid}" 2>/dev/null || true; wait "${gpu_monitor_pid}" 2>/dev/null || true; unset gpu_monitor_pid
+  printf '%s\n' "${status}" >"${output_dir}/raw-exit-code.txt"
+  if [[ ${status} -ne 0 && -s ${loader_summary} ]]; then
+    if "${python}" - "${loader_summary}" "$((steps - warmup_steps))" <<'PY'
+import json
+import sys
+
+summary = json.load(open(sys.argv[1], encoding="utf-8"))
+raise SystemExit(0 if int(summary.get("measured_batches", -1)) == int(sys.argv[2]) else 1)
+PY
+    then
+      printf 'warning: normalizing post-measurement cleanup exit %s; raw status retained\n' "${status}" | tee -a "${console}"
+      status=0
+    fi
+  fi
   printf '%s\n' "${status}" >"${output_dir}/exit-code.txt"
   if [[ ${status} -eq 0 ]]; then
     "${python}" "${run_summarizer}" --loader-summary "${loader_summary}" \
