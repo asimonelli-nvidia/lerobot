@@ -44,10 +44,11 @@ revisions use the same adjusted recipe.
 
 SmolVLA is the third model family. Its recipe uses the pretrained SmolVLM2-500M backbone and a
 dataset-native action expert, matching LeRobot's documented LIBERO training path. It uses BF16 and
-an action horizon of 50 on both datasets. Capacity calibration starts at batch 64, then probes lower
-or higher batches to lock the largest stable shared fit for baseline and proposal on each system and
-dataset. Reportable SmolVLA jobs use the same 600/100-step training window and 300/50-batch loader
-window after that fit is locked.
+an action horizon of 50 on both datasets. Calibration starts at batch 64, then probes lower or higher
+batches to lock the highest-throughput stable shared recipe for baseline and proposal on each system
+and dataset. This is deliberately not the largest batch that merely fits: the L40 probes showed lower
+throughput near its memory ceiling. Reportable SmolVLA jobs use the same 600/100-step training window
+and 300/50-batch loader window after the recipe is locked.
 
 The local DROID subset stores temporal action normalization statistics for 40 offsets. SmolVLA's
 default 50-step horizon extends the staged copy by repeating the final recorded offset for positions
@@ -56,8 +57,13 @@ This matrix targets system efficiency rather than model-quality comparison.
 
 | SmolVLA cell | L40 | H100 SXM | H200 |
 | --- | --- | --- | --- |
-| LIBERO | calibrate from 64 | calibrate from 64 | calibrate from 64 |
-| DROID | calibrate from 64 | calibrate from 64 | calibrate from 64 |
+| LIBERO | 64 · 15 workers | 384 · 15 workers | calibrate after GR00T queue |
+| DROID | 64 · 15 workers | 256 · 15 workers | calibrate after GR00T queue |
+
+The L40 capacity probes fit batch 192 on LIBERO and 160 on DROID, but both were slower than batch 64;
+batch 256 LIBERO failed with CUDA OOM. H100 throughput increased through batch 384 on LIBERO and 256
+on DROID; batch 448 LIBERO failed with CUDA OOM. A joint 4/8/15-worker sweep selected 15 workers for
+both implementations in all four locked cells.
 
 ## Interpretation
 

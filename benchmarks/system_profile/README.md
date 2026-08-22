@@ -28,7 +28,8 @@ statistics to SmolVLA's 50-step horizon; source data remains immutable.
 
 Each benchmark uses three paired repeats in AB/BA/AB order. Training normally runs 600 steps and excludes the first 100; the long H200 GR00T LIBERO recipe uses 400 total and 300 measured steps. Dataloading runs 300 batches per repeat and excludes the first 50. Worker counts are calibrated jointly; large-batch recipes use a short sweep before full repeats at one shared worker count. Data and model assets are staged to node-local storage before measurement. Capacity and stability calibration is separate from reportable evidence; a failed fit is followed by a smaller batch or worker count rather than being treated as a completed benchmark.
 
-Exact fit recipes and run status are recorded in [EXPERIMENT_MATRIX.md](EXPERIMENT_MATRIX.md).
+Exact throughput-optimized recipes and run status are recorded in
+[EXPERIMENT_MATRIX.md](EXPERIMENT_MATRIX.md).
 
 ## Evidence retained
 
