@@ -42,7 +42,9 @@ request, and the exact runtime. Do not reuse training step or warm-up semantics 
 
 Keep relative pointers to the console log, offline tracker directory, GPU samples, host/process samples,
 hardware inventory, filesystem and scheduler metadata, package inventory, dataset metadata, manifest,
-and summaries. A nonzero exit without a summary must still appear in the bundle.
+and summaries. A nonzero exit without a summary must still appear in the bundle. If a complete
+measurement is accepted despite a post-measurement cleanup failure, retain both the raw and normalized
+exit codes and the explicit completeness check.
 
 ## Comparison guardrail
 

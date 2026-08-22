@@ -53,6 +53,9 @@ process, dataset, environment, Slurm, and Git evidence.
   report steps/s for the Model stage and samples/s for effective throughput.
 - Preserve complete console, tracker, GPU, process, hardware, and environment artifacts even when the
   card shows only decision-critical metrics.
+- If worker cleanup fails after the declared measurement window, retain the raw nonzero exit. Treat
+  the measurement as complete only when a persisted summary proves that every expected sample was
+  recorded; otherwise retry it as infrastructure failure.
 - Diagnose the dominant measured stage before recommending another GPU, batch, worker count, decoder,
   or distributed strategy. Distinguish observed evidence from an agent inference.
 - Do not hide errors, cancel inconvenient results, or replace measured values with estimates. A card
