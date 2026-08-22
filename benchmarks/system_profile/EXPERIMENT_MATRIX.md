@@ -1,36 +1,47 @@
-# Initial experiment matrix
+# Experiment matrix
 
-## Target
+## Comparison identity
 
-Measure steady-state GR00T N1.7 training-system throughput for LeRobot `main` versus the batched
-dataset reader. This is a systems benchmark, not a model-quality evaluation.
+| Role | Revision |
+| --- | --- |
+| LeRobot main | `223a8ad16c52dad961cc1104477ffc3369c5189a` |
+| Batched reader | `0aa734f39ccdec8e08f7dd070ca21a90284d47b5` |
+| Source GitLab commit | `86da6a090952845c4312165ee3cd6c9d00489e14` |
+| Stable patch ID | `0c7c0504f9c49eac1df1d3fedeea3b5c2028a81a` |
 
-## Matrix
+The proposal commit is a direct child of the baseline and has the same stable patch ID as the GitLab
+commit. The paired source therefore changes only the five dataset-reader patch files.
 
-| System tier | GPU | CPU / GPU | LIBERO Spatial batch | DROID batch | Paired runs |
-| --- | --- | ---: | ---: | ---: | ---: |
-| Low | NVIDIA L40S 48 GB | 32 | 64 | 32 | 3 |
-| Mid | NVIDIA H100 PCIe 80 GB | 32 | 128 | 64 | 3 |
-| High | NVIDIA H200 141 GB | 32 | 320 | 64 | 3 |
+## Reportable protocol
 
-Each paired run executes baseline and proposal in AB/BA/AB order. A run uses 300 steps, excludes the
-first 50 as warm-up, keeps 15 loader workers per GPU, stages data to node-local storage, disables
-checkpoints and evaluation, and records offline W&B plus GPU and host telemetry.
+| Target | Measurement | Repeats | Warm-up | Primary card metric |
+| --- | --- | ---: | ---: | --- |
+| Dataloading | 300 batches | 3, AB/BA/AB | 50 batches | sustained samples/s |
+| Training throughput | 600 steps | 3, AB/BA/AB | 100 steps | Model steps/s |
 
-LIBERO batch 320 is the documented GR00T recipe. Its H100 capacity check fails at the first update,
-so lower tiers use hardware-fit batches. DROID batch 64 follows the documented new-embodiment
-recipe. Any DROID batch reduction is recorded as a capacity result before throughput is measured.
-On L40S, DROID batch 64 completes one step and then exhausts the 44.4 GiB usable memory; the paired
-batch-32 validation completes on both revisions, so batch 32 is the measured low-tier recipe.
+Both sides use the same dataset subset, model, precision, batch, workers, CPU allocation, node-local
+data, transforms, sampler, backend, and seed. Every measured GPU receives 32 CPU cores. Loader runs
+sweep 4, 8, and 15 workers and select one shared worker count that maximizes the slower side.
 
-## Comparison rules
+## Training recipes
 
-Within a system/dataset pair, only the dataset reader revision changes. Dataset subset, model,
-precision, batch, worker count, seed, code environment, CPU allocation, and storage placement remain
-fixed. Cross-system throughput is descriptive because the hardware-fit LIBERO batch changes by tier.
+| System | GR00T · LIBERO | GR00T · DROID | Diffusion · LIBERO | Diffusion · DROID |
+| --- | ---: | ---: | ---: | ---: |
+| NVIDIA L40 | 64 · 15 workers | 32 · 15 workers | calibrating 192 | calibrating 32 / 64 / 128 |
+| NVIDIA H100 SXM | 128 · 15 workers | 64 · 15 workers | 384 · 15 workers | 32 · 15 workers |
+| NVIDIA H200 | 320 · 15 workers | 64 · 15 workers | 512 · 15 workers | 64 · 15 workers |
 
-The primary result is samples per second derived from steady-state step time. Cards also retain
-preprocessing/update time, data wait, GPU utilization and memory, power, CPU/process metrics,
-startup-to-first-step time, run variance, failures, and exact revisions.
+Values are per-GPU batch followed by training worker count. Diffusion Policy uses a ResNet-18
+backbone in FP32; GR00T N1.7 uses BF16. LIBERO Diffusion uses action horizon 32 and DROID uses 16.
 
-Multi-GPU scaling is intentionally deferred until these single-GPU reference cards are stable.
+## Interpretation
+
+The Dataloading card attributes changes to the input path and retains sustained throughput,
+batch-wait p50/p95, CPU seconds/sample, process memory, video-grouping opportunity, and temporal
+deduplication. The Training card combines decode and preprocessing into one Dataloading stage and
+shows Model steps/s separately from update time.
+
+CUDA allocation failures trigger a smaller matched batch. DataLoader worker, IPC, shared-memory, or
+scheduler failures trigger an infrastructure retry and are never labeled OOM. Cross-system results
+are descriptive when the hardware-fit batch differs. Multi-GPU scaling is intentionally deferred
+until the single-GPU reference cards are stable.
