@@ -14,7 +14,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 TOKEN_RE = re.compile(r"(?P<key>[A-Za-z0-9_./-]+):(?P<value>[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)")
 STEP_RE = re.compile(r"(?:^|\s)step:(?P<step>\d+)(?:\s|$)")
@@ -136,7 +135,56 @@ def _number(value: str) -> float | None:
         return None
 
 
-def _parse_gpu(path: Path, window: tuple[float, float] | None = None) -> dict[str, Any]:
+def _select_gpu_uuid(
+    path: Path,
+    window: tuple[float, float] | None,
+    expected_memory_mib: float | None,
+) -> tuple[str | None, str]:
+    samples: dict[str, list[tuple[float, float]]] = {}
+    with path.open(newline="", encoding="utf-8", errors="replace") as stream:
+        for values in csv.reader(stream):
+            if len(values) != len(GPU_FIELDS):
+                continue
+            row = dict(zip(GPU_FIELDS, (value.strip() for value in values), strict=True))
+            memory = _number(row["memory_used_mib"])
+            if memory is None:
+                continue
+            try:
+                timestamp = datetime.strptime(row["timestamp"], "%Y/%m/%d %H:%M:%S.%f").astimezone().timestamp()
+            except ValueError:
+                continue
+            samples.setdefault(row["uuid"], []).append((timestamp, memory))
+
+    if len(samples) <= 1:
+        return (next(iter(samples), None), "single-visible-gpu")
+
+    expected = expected_memory_mib or 0.0
+    ranked: list[tuple[tuple[bool, bool, float, float], str]] = []
+    for uuid, rows in samples.items():
+        measured = [memory for timestamp, memory in rows if window is None or window[0] < timestamp <= window[1]]
+        if not measured:
+            continue
+        before = [memory for timestamp, memory in rows if window is not None and timestamp <= window[0]]
+        baseline_values = before[: min(len(before), 16)] or [memory for _, memory in rows[:16]]
+        baseline = statistics.median(baseline_values)
+        measured_p95 = _quantile(sorted(measured), 0.95)
+        delta = measured_p95 - baseline
+        relative_error = abs(measured_p95 - expected) / max(expected, 1.0)
+        started_during_run = delta > max(512.0, expected * 0.05)
+        plausible_memory = expected <= 0 or measured_p95 >= expected * 0.75
+        ranked.append(((started_during_run, plausible_memory, -relative_error, delta), uuid))
+
+    if not ranked:
+        return None, "unresolved"
+    ranked.sort(reverse=True)
+    return ranked[0][1], "startup-memory-delta+torch-peak"
+
+
+def _parse_gpu(
+    path: Path,
+    window: tuple[float, float] | None = None,
+    uuid_filter: str | None = None,
+) -> dict[str, Any]:
     numeric: dict[str, list[float]] = {field: [] for field in GPU_FIELDS}
     rows_seen = 0
     rows_selected = 0
@@ -153,6 +201,8 @@ def _parse_gpu(path: Path, window: tuple[float, float] | None = None) -> dict[st
             except ValueError:
                 continue
             if window is not None and not (window[0] < timestamp <= window[1]):
+                continue
+            if uuid_filter is not None and row["uuid"] != uuid_filter:
                 continue
             rows_selected += 1
             names.add(row["name"])
@@ -212,12 +262,20 @@ def main() -> None:
         training["startup_to_first_step_s"] = max(0.0, first_step_epoch_s - process_started_epoch_s)
     else:
         training["startup_to_first_step_s"] = None
+    memory_stats = training.get("metrics", {}).get("mem_gb") or {}
+    expected_memory_mib = float(memory_stats.get("p95", 0.0)) * 1024 if memory_stats else None
+    gpu_uuid, gpu_selection_strategy = _select_gpu_uuid(args.gpu, measurement_window, expected_memory_mib)
     result = {
         "schema_version": "1.0",
         "training": training,
         "gpu": {
-            "steady_state": _parse_gpu(args.gpu, measurement_window),
-            "full_run": _parse_gpu(args.gpu),
+            "selection": {
+                "uuid": gpu_uuid,
+                "strategy": gpu_selection_strategy,
+                "expected_torch_peak_memory_mib": expected_memory_mib,
+            },
+            "steady_state": _parse_gpu(args.gpu, measurement_window, gpu_uuid),
+            "full_run": _parse_gpu(args.gpu, uuid_filter=gpu_uuid),
         },
         "system": {
             "steady_state": _parse_system(args.system, measurement_window),
