@@ -206,11 +206,15 @@ if [[ ${model_profile} == groot ]]; then
 fi
 if [[ ${model_profile} == smolvla ]]; then
   smolvla_hf_source=${SMOLVLA_HF_SOURCE:-${shared_root}/experiments/smolvla-assets/huggingface}
-  if [[ ! -d ${smolvla_hf_source}/hub/models--HuggingFaceTB--SmolVLM2-500M-Video-Instruct ]]; then
+  smolvla_hub_source=${smolvla_hf_source}/hub
+  if [[ -d ${smolvla_hf_source}/models--HuggingFaceTB--SmolVLM2-500M-Video-Instruct ]]; then
+    smolvla_hub_source=${smolvla_hf_source}
+  fi
+  if [[ ! -d ${smolvla_hub_source}/models--HuggingFaceTB--SmolVLM2-500M-Video-Instruct ]]; then
     echo "missing staged SmolVLA backbone: ${smolvla_hf_source}" >&2
     exit 2
   fi
-  cp -a "${smolvla_hf_source}/hub/models--HuggingFaceTB--SmolVLM2-500M-Video-Instruct" "${runtime}/hf/hub/"
+  cp -a "${smolvla_hub_source}/models--HuggingFaceTB--SmolVLM2-500M-Video-Instruct" "${runtime}/hf/hub/"
 fi
 
 for entry in "baseline:${baseline_sha}" "proposal:${proposal_sha}"; do
