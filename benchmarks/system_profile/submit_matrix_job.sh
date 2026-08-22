@@ -19,11 +19,16 @@ case ${target} in
 esac
 
 mkdir -p "${results}/slurm"
+steps=${STEPS:-${LOADER_STEPS:-300}}
+warmup_steps=${WARMUP_STEPS:-${LOADER_WARMUP_STEPS:-50}}
+repeats=${REPEATS:-${LOADER_REPEATS:-3}}
+worker_counts=${WORKER_COUNTS:-${LOADER_WORKERS:-0:4:8:15}}
+
 sbatch --parsable \
   --account="${ACCOUNT}" --partition="${PARTITION}" --qos="${QOS:-batch}" \
   --job-name="${target}-${MODEL_PROFILE:-groot}-${DATASET_PROFILE:-libero}-${SYSTEM_LABEL:-system}" \
   --time="${TIME_LIMIT:-1-00:00:00}" --nodes=1 --ntasks=1 --gres=gpu:1 \
   --cpus-per-task="${CPUS_PER_TASK:-32}" --mem="${MEMORY:-120G}" "${exclusive_args[@]}" \
   --output="${results}/slurm/slurm-%j.out" \
-  --export="ALL,SHARED_ROOT=${SHARED_ROOT},REPO_PATH=${repo},RESULTS_ROOT=${results},SYSTEM_LABEL=${SYSTEM_LABEL:-system},DATASET_PROFILE=${DATASET_PROFILE:-libero},MODEL_PROFILE=${MODEL_PROFILE:-groot},STEPS=${STEPS:-300},WARMUP_STEPS=${WARMUP_STEPS:-50},REPEATS=${REPEATS:-3},BATCH_SIZE=${BATCH_SIZE:-128},NUM_WORKERS=${NUM_WORKERS:-15},WORKER_COUNTS=${WORKER_COUNTS:-0:4:8:15}" \
+  --export="ALL,SHARED_ROOT=${SHARED_ROOT},REPO_PATH=${repo},RESULTS_ROOT=${results},SYSTEM_LABEL=${SYSTEM_LABEL:-system},DATASET_PROFILE=${DATASET_PROFILE:-libero},MODEL_PROFILE=${MODEL_PROFILE:-groot},STEPS=${steps},WARMUP_STEPS=${warmup_steps},REPEATS=${repeats},BATCH_SIZE=${BATCH_SIZE:-128},NUM_WORKERS=${NUM_WORKERS:-15},WORKER_COUNTS=${worker_counts}" \
   "${entrypoint}"
