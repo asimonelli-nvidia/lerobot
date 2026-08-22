@@ -123,7 +123,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-python=${environment}/bin/python
+python=${PYTHON_RUNTIME:-${shared_root}/dataloading/managed-python/cpython-3.12.3-linux-x86_64-gnu/bin/python}
+site_packages=${environment}/lib/python3.12/site-packages
 monitor=${repo}/benchmarks/system_profile/monitor_process.py
 summarizer=${repo}/benchmarks/system_profile/summarize_run.py
 experiment_summarizer=${repo}/benchmarks/system_profile/summarize_experiment.py
@@ -181,6 +182,7 @@ export WANDB_CONFIG_DIR=${runtime}/wandb-config
 export WANDB_DATA_DIR=${runtime}/wandb-data
 export XDG_CACHE_HOME=${runtime}/cache
 export LD_LIBRARY_PATH=${shared_root}/dataloading/ffmpeg7-x86/lib:${LD_LIBRARY_PATH:-}
+export PYTHONPATH=${site_packages}:${PYTHONPATH:-}
 export TRITON_CACHE_DIR=${runtime}/triton
 export TORCHINDUCTOR_CACHE_DIR=${runtime}/torchinductor
 
@@ -288,7 +290,7 @@ run_one() {
   gpu_monitor_pid=$!
 
   set +e
-  PYTHONPATH="${source_dir}/src" "${python}" "${monitor}" \
+  PYTHONPATH="${source_dir}/src:${site_packages}" "${python}" "${monitor}" \
     --samples "${output_dir}/system.jsonl" \
     --summary "${output_dir}/process-summary.json" \
     --label "${label}" --interval 0.5 -- \

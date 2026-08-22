@@ -64,7 +64,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-python=${environment}/bin/python
+python=${PYTHON_RUNTIME:-${shared_root}/dataloading/managed-python/cpython-3.12.3-linux-x86_64-gnu/bin/python}
+site_packages=${environment}/lib/python3.12/site-packages
 monitor=${repo}/benchmarks/system_profile/monitor_process.py
 benchmark=${repo}/benchmarks/system_profile/benchmark_dataloader.py
 run_summarizer=${repo}/benchmarks/system_profile/summarize_dataloader_run.py
@@ -93,6 +94,7 @@ export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1
 export TOKENIZERS_PARALLELISM=false NO_ALBUMENTATIONS_UPDATE=1
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 export LD_LIBRARY_PATH=${shared_root}/dataloading/ffmpeg7-x86/lib:${LD_LIBRARY_PATH:-}
+export PYTHONPATH=${site_packages}:${PYTHONPATH:-}
 
 metadata=${results_root}/system
 mkdir -p "${metadata}"
@@ -142,7 +144,7 @@ run_one() {
     model_args+=(--model-path "${runtime}/models/GR00T-N1.7-3B")
   fi
   set +e
-  PYTHONPATH="${source_dir}/src" "${python}" "${monitor}" \
+  PYTHONPATH="${source_dir}/src:${site_packages}" "${python}" "${monitor}" \
     --samples "${output_dir}/system.jsonl" --summary "${output_dir}/process-summary.json" \
     --label "workers-${workers}-${label}" --interval 0.1 -- \
     "${python}" "${benchmark}" \
