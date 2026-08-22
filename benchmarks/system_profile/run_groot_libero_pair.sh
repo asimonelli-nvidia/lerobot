@@ -98,6 +98,7 @@ metadata_video_layout=${metadata_video_layout:-source}
 baseline_sha=${BASELINE_SHA:-223a8ad16c52dad961cc1104477ffc3369c5189a}
 proposal_sha=${PROPOSAL_SHA:-0aa734f39ccdec8e08f7dd070ca21a90284d47b5}
 harness_sha=$(git -C "${repo}" rev-parse HEAD)
+proposal_patch_id=$(git -C "${repo}" show --pretty=email --no-ext-diff "${proposal_sha}" | git patch-id --stable | awk '{print $1}')
 steps=${STEPS:-600}
 warmup_steps=${WARMUP_STEPS:-100}
 repeats=${REPEATS:-3}
@@ -259,6 +260,7 @@ print(json.dumps({
     "comparison": {
         "baseline_sha": "${baseline_sha}",
         "proposal_sha": "${proposal_sha}",
+        "proposal_patch_id": "${proposal_patch_id}",
         "order": "AB/BA/AB",
     },
     "harness": {
