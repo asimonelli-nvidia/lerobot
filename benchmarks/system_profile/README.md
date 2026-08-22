@@ -32,6 +32,11 @@ Exact fit recipes and run status are recorded in [EXPERIMENT_MATRIX.md](EXPERIME
 
 ## Evidence retained
 
-Every training run keeps per-step logs, offline W&B history, 250 ms GPU telemetry, 500 ms process and host telemetry, system and filesystem metadata, exact revisions, failures, and compact summaries. Loader runs retain the same system evidence plus per-batch timing and grouping metrics. The experiment-card importer keeps all raw artifacts and chooses only target-critical metrics for the card.
+Every training run keeps per-step logs, offline W&B history, 250 ms telemetry bound to the
+Slurm-assigned GPU, 500 ms process and host telemetry, system and filesystem metadata, exact
+revisions, failures, and compact summaries. The resolved GPU selector is saved in the manifest.
+Loader runs retain the same system evidence plus per-batch timing and grouping metrics. The
+experiment-card importer keeps all raw artifacts and chooses only target-critical metrics for the
+card.
 
 Use `submit_matrix_job.sh` as the cluster entrypoint. It accepts `TARGET=training` or `TARGET=dataloading`; loader-specific aliases such as `LOADER_WORKERS=4:8:15` are supported. The agent-facing workflow and comparison guardrails live in `skills/physical-ai-experiments/SKILL.md`.

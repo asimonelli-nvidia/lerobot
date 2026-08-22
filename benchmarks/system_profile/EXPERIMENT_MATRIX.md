@@ -24,6 +24,8 @@ data, transforms, sampler, backend, and seed. Every measured GPU receives 32 CPU
 counts are calibrated jointly and one shared count maximizes the slower side. Affordable recipes keep
 the complete 4/8/15-worker sweep; large-batch recipes use a short sweep followed by full paired repeats
 at the selected count.
+GPU utilization, memory, and power telemetry is restricted to the GPU assigned by Slurm; the selector
+is retained with the system metadata.
 
 ## Training recipes
 

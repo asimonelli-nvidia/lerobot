@@ -60,6 +60,11 @@ batch_size=${BATCH_SIZE:-128}
 worker_counts=${WORKER_COUNTS:-"0 4 8 15"}
 worker_counts=${worker_counts//:/ }
 telemetry_interval_ms=${TELEMETRY_INTERVAL_MS:-250}
+gpu_selector=${SLURM_JOB_GPUS:-${CUDA_VISIBLE_DEVICES:-}}
+gpu_query_args=()
+if [[ -n ${gpu_selector} && ${gpu_selector} != NoDevFiles ]]; then
+  gpu_query_args+=(--id="${gpu_selector}")
+fi
 
 job_id=${SLURM_JOB_ID:-manual-$(date -u +%Y%m%dT%H%M%SZ)}
 if [[ ! ${system_label} =~ ^[a-z0-9][a-z0-9._-]*$ ]]; then
@@ -158,6 +163,7 @@ lscpu >"${metadata}/lscpu.txt"
 df -hT >"${metadata}/filesystems.txt" 2>&1 || true
 nvidia-smi -q >"${metadata}/nvidia-smi-q.txt"
 nvidia-smi topo -m >"${metadata}/nvidia-smi-topology.txt" 2>/dev/null || true
+printf '%s\n' "${gpu_selector:-unresolved}" >"${metadata}/gpu-selector.txt"
 scontrol show job "${SLURM_JOB_ID}" >"${metadata}/slurm-job.txt" 2>/dev/null || true
 cp "${runtime}/data/${dataset_staged_name}/meta/info.json" "${metadata}/dataset-info.json"
 git -C "${repo}" show --no-patch --format=fuller "${baseline_sha}" >"${metadata}/baseline-commit.txt"
@@ -177,6 +183,7 @@ print(json.dumps({
   "benchmark": {"steps": ${steps}, "warmup_steps": ${warmup_steps}, "repeats": ${repeats},
                 "batch_size": ${batch_size}, "worker_counts": [${worker_counts// /,}], "seed": 42,
                 "prefetch_factor": 1, "persistent_workers": True, "storage": "node-local"},
+  "telemetry": {"gpu_interval_ms": ${telemetry_interval_ms}, "gpu_selector": "${gpu_selector:-unresolved}"},
 }, indent=2, sort_keys=True))
 PY
 
@@ -194,7 +201,7 @@ run_one() {
   printf '%s\n' "${implementation}" >"${output_dir}/implementation.txt"
   printf '%s\n' "${repeat}" >"${output_dir}/repeat.txt"
 
-  nvidia-smi --query-gpu=timestamp,index,name,uuid,utilization.gpu,utilization.memory,utilization.decoder,memory.used,memory.total,power.draw,power.limit,temperature.gpu,clocks.sm,clocks.mem,pstate --format=csv,noheader,nounits --loop-ms="${telemetry_interval_ms}" >"${gpu_csv}" &
+  nvidia-smi "${gpu_query_args[@]}" --query-gpu=timestamp,index,name,uuid,utilization.gpu,utilization.memory,utilization.decoder,memory.used,memory.total,power.draw,power.limit,temperature.gpu,clocks.sm,clocks.mem,pstate --format=csv,noheader,nounits --loop-ms="${telemetry_interval_ms}" >"${gpu_csv}" &
   gpu_monitor_pid=$!
   local model_args=()
   if [[ ${model_profile} == groot ]]; then
