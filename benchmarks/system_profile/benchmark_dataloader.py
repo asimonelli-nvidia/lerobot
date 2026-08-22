@@ -15,7 +15,7 @@ import json
 import math
 import statistics
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -223,7 +223,7 @@ def main() -> None:
                 batch = next(iterator)
             wait_s = time.perf_counter() - started
             observed_batch = len(next(iter(batch.values())))
-            timestamp = datetime.now(UTC).isoformat()
+            timestamp = datetime.now(timezone.utc).isoformat()  # noqa: UP017 (cluster uses Python 3.10)
             if step == args.warmup_steps + 1:
                 measurement_started = timestamp
             if step > args.warmup_steps:
