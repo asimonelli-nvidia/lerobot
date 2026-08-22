@@ -16,13 +16,20 @@ not the source of truth.
 
 ## Results for a training-throughput target
 
-The default card should show steady-state samples/s, step time, GPU utilization, GPU memory, and the
-dominant measured stage. Retain data-wait, preprocessing, update, power, energy/sample, GPU-hours per
-million samples, CPU/process memory, startup-to-first-step, wall time, distributions, repeat values,
-and failures in the evidence bundle.
+The default card should show steady-state steps/s for the Model stage, effective samples/s, GPU
+utilization, GPU memory, and the dominant measured stage. Retain data-wait, preprocessing, update,
+power, energy/sample, GPU-hours per million samples, CPU/process memory, startup-to-first-step, wall
+time, distributions, repeat values, and failures in the evidence bundle.
 
 Do not average initialization into steady state. Derive throughput from the measured step-time window
 and effective batch. State whether the comparison is paired and whether all expected repeats finished.
+
+## Results for a dataloading target
+
+Show sustained loader samples/s, batch-wait p50 and p95, CPU seconds/sample, worker count, and process
+memory. Retain per-batch waits, worker sweeps, grouping opportunity, GPU decode activity, storage
+placement, and raw process telemetry. Choose one shared worker count for both implementations; do not
+tune each side independently.
 
 ## Results for an inference target
 

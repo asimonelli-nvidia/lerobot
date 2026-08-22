@@ -31,6 +31,9 @@ For an implementation comparison:
   workers, CPU allocation, storage, seed, steps, and warm-up policy fixed.
 - Use a hardware-fit batch when the documented recipe does not fit. Keep the failed recipe as a
   capacity result and do not call cross-hardware throughput causal when batches differ.
+- Diagnose the failure class before changing capacity. CUDA allocation failures justify a smaller
+  batch; DataLoader worker, IPC, shared-memory, or scheduler failures require an infrastructure retry
+  and must not be labeled OOM.
 - Prefer at least three paired repeats in balanced AB/BA/AB order. Report the paired change and
   variance. If the spread is comparable to run noise, say there is no clear lead.
 - Stage immutable data and model inputs once on node-local storage before timing. Do not tune one
@@ -45,6 +48,9 @@ process, dataset, environment, Slurm, and Git evidence.
 
 - Keep startup-to-first-step separate from steady-state step time. A slow first batch is not steady
   training throughput, and prefetched data wait does not prove decoding is free.
+- For a dataloading target, measure the input pipeline without model compute and report sustained
+  samples/s, batch-wait p50/p95, CPU seconds/sample, and process memory. For training throughput,
+  report steps/s for the Model stage and samples/s for effective throughput.
 - Preserve complete console, tracker, GPU, process, hardware, and environment artifacts even when the
   card shows only decision-critical metrics.
 - Diagnose the dominant measured stage before recommending another GPU, batch, worker count, decoder,
