@@ -45,6 +45,11 @@ dataset-native action expert. GR00T N1.7 uses BF16 and its workload-specific 40-
 DROID horizon. The GR00T augmentation recipe is enabled only for GR00T; Diffusion Policy and SmolVLA
 use their representative transform-disabled recipes.
 
+The source DROID subset stores 40-offset temporal action statistics. Node-local staged copies
+recompute those statistics from the subset's action/state parquet at Diffusion Policy's 64-step or
+SmolVLA's 50-step horizon. The shared source dataset remains immutable, and the adjustment is recorded
+in each manifest.
+
 The local DROID subset stores temporal action normalization statistics for 40 offsets. SmolVLA's
 default 50-step horizon extends the staged copy by repeating the final recorded offset for positions
 41–50. The source dataset is never modified, and the adjustment is explicit in every run manifest.

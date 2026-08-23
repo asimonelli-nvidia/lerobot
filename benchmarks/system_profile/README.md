@@ -23,7 +23,8 @@ GR00T N1.7, LeRobot Diffusion Policy with a ResNet-18 backbone, and SmolVLA; and
 H100 SXM, or H200 with 32 allocated CPU cores per measured GPU. SmolVLA follows LeRobot's
 documented recipe: pretrained SmolVLM2-500M backbone weights with a dataset-native action expert.
 That initialization is recorded on every card.
-The staged DROID copy records any model-horizon metadata adjustment; source data remains immutable.
+For Diffusion Policy and SmolVLA, the staged DROID copy recomputes temporal action statistics at the
+model's 64- or 50-step horizon; source data remains immutable.
 
 Each benchmark uses three paired repeats in AB/BA/AB order. Training runs 600 steps and excludes the first 100; dataloading runs 300 batches per repeat and excludes the first 50. The reference matrix uses batch 32 across every GPU and workload because the L40 GR00T DROID batch-64 capacity gate OOMed at 45.5 of 46.1 GiB. Every run uses 4 workers per GPU/rank, prefetch factor 4, persistent workers, `spawn`, and pinned memory. Data and model assets are staged to node-local storage before measurement.
 

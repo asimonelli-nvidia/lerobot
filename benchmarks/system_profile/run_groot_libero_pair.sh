@@ -114,8 +114,8 @@ case ${model_profile} in
 esac
 metadata_video_layout=${metadata_video_layout:-source}
 stats_adjustment=none
-if [[ ${model_profile} == smolvla && ${dataset_profile} == droid ]]; then
-  stats_adjustment=repeat-last-temporal-action-stat-to-50
+if [[ ${dataset_profile} == droid && ${model_profile} != groot ]]; then
+  stats_adjustment=recomputed-relative-action-stats-to-${horizon}
 fi
 
 baseline_sha=${BASELINE_SHA:-223a8ad16c52dad961cc1104477ffc3369c5189a}
@@ -191,6 +191,15 @@ fi
 
 # Stage immutable inputs once per allocation. Setup time is kept outside every measured run.
 cp -a "${dataset_source}" "${runtime}/data/${dataset_staged_name}"
+if [[ ${dataset_profile} == droid && ${model_profile} != groot ]]; then
+  PYTHONPATH="${repo}:${dependency_paths}" "${python}" - <<PY
+from pathlib import Path
+
+from benchmarks.system_profile.prepare_droid_subset import write_relative_stats
+
+write_relative_stats(Path("${runtime}/data/${dataset_staged_name}"), ${horizon})
+PY
+fi
 if [[ ${model_profile} == diffusion || ${model_profile} == smolvla ]]; then
   "${python}" - <<PY
 import json
@@ -205,20 +214,6 @@ for feature in info["features"].values():
         names[-1] = "channel"
         feature["names"] = names
 path.write_text(json.dumps(info, indent=4) + "\n")
-if "${model_profile}" == "diffusion":
-    stats_path = path.with_name("stats.json")
-    stats = json.loads(stats_path.read_text())
-    for name, values in stats.get("action", {}).items():
-        if isinstance(values, list) and len(values) > ${horizon:-0}:
-            stats["action"][name] = values[:${horizon:-0}]
-    stats_path.write_text(json.dumps(stats, indent=4) + "\n")
-elif "${model_profile}" == "smolvla" and "${dataset_profile}" == "droid":
-    stats_path = path.with_name("stats.json")
-    stats = json.loads(stats_path.read_text())
-    for name, values in stats.get("action", {}).items():
-        if isinstance(values, list) and values and len(values) < 50:
-            stats["action"][name] = values + [values[-1]] * (50 - len(values))
-    stats_path.write_text(json.dumps(stats, indent=4) + "\n")
 PY
 fi
 if [[ ${model_profile} == groot ]]; then
