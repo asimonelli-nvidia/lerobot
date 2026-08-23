@@ -25,7 +25,7 @@ documented recipe: pretrained SmolVLM2-500M backbone weights with a dataset-nati
 That initialization is recorded on every card.
 The staged DROID copy records any model-horizon metadata adjustment; source data remains immutable.
 
-Each benchmark uses three paired repeats in AB/BA/AB order. Training runs 600 steps and excludes the first 100; dataloading runs 300 batches per repeat and excludes the first 50. The reference matrix uses batch 64 across every GPU and workload, gated by a short L40 GR00T DROID fit test. If that cell cannot fit safely, the complete matrix uses batch 32. Every run uses 4 workers per GPU/rank, prefetch factor 4, persistent workers, `spawn`, and pinned memory. Data and model assets are staged to node-local storage before measurement.
+Each benchmark uses three paired repeats in AB/BA/AB order. Training runs 600 steps and excludes the first 100; dataloading runs 300 batches per repeat and excludes the first 50. The reference matrix uses batch 32 across every GPU and workload because the L40 GR00T DROID batch-64 capacity gate OOMed at 45.5 of 46.1 GiB. Every run uses 4 workers per GPU/rank, prefetch factor 4, persistent workers, `spawn`, and pinned memory. Data and model assets are staged to node-local storage before measurement.
 
 Exact throughput-optimized recipes and run status are recorded in
 [EXPERIMENT_MATRIX.md](EXPERIMENT_MATRIX.md).
@@ -39,4 +39,4 @@ Loader runs retain the same system evidence plus per-batch timing and grouping m
 experiment-card importer keeps all raw artifacts and chooses only target-critical metrics for the
 card.
 
-Use `submit_matrix_job.sh` as the cluster entrypoint. It accepts `TARGET=training` or `TARGET=dataloading`; `BATCH_SIZE=64`, `NUM_WORKERS=4`, `WORKER_COUNTS=4`, and `PREFETCH_FACTOR=4` define the reference recipe. The agent-facing workflow and comparison guardrails live in `skills/physical-ai-experiments/SKILL.md`.
+Use `submit_matrix_job.sh` as the cluster entrypoint. It accepts `TARGET=training` or `TARGET=dataloading`; `BATCH_SIZE=32`, `NUM_WORKERS=4`, `WORKER_COUNTS=4`, and `PREFETCH_FACTOR=4` define the reference recipe. The agent-facing workflow and comparison guardrails live in `skills/physical-ai-experiments/SKILL.md`.

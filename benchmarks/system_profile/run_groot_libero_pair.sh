@@ -21,7 +21,7 @@ case ${dataset_profile} in
     dataset_repo_id=IPEC-COMMUNITY/libero_spatial_no_noops_1.0.0_lerobot
     dataset_label=libero-spatial
     dataset_subset=all-432-episodes
-    batch_size_default=64
+    batch_size_default=32
     dataset_args=()
     ;;
   droid)
@@ -30,7 +30,7 @@ case ${dataset_profile} in
     dataset_repo_id=lerobot/droid_1.0.1
     dataset_label=droid
     dataset_subset=episodes-0-99
-    batch_size_default=64
+    batch_size_default=32
     droid_episodes=$(seq -s, 0 99)
     dataset_args=(--dataset.episodes="[${droid_episodes}]")
     ;;
@@ -80,7 +80,7 @@ case ${model_profile} in
     model_initialization='ImageNet-pretrained ResNet-18 backbone'
     image_transforms_enabled=False
     metadata_video_layout=hwc-with-channel-axis
-    batch_size_default=64
+    batch_size_default=32
     horizon=64
     action_steps=32
     drop_last=7
@@ -99,7 +99,7 @@ case ${model_profile} in
     model_initialization='Pretrained SmolVLM2-500M backbone + dataset-native action expert'
     image_transforms_enabled=False
     horizon=50
-    batch_size_default=64
+    batch_size_default=32
     metadata_video_layout=hwc-with-channel-axis
     policy_args=(
       --policy.type=smolvla --policy.device=cuda

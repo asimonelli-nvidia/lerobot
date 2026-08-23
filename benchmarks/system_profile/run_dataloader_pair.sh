@@ -39,7 +39,7 @@ case ${model_profile} in
     image_transforms_enabled=True
     action_horizon=40
     [[ ${dataset_profile} == droid ]] && action_horizon=16
-    batch_size_default=64
+    batch_size_default=32
     ;;
   diffusion)
     model_id=lerobot/diffusion-resnet18
@@ -49,7 +49,7 @@ case ${model_profile} in
     image_transforms_enabled=False
     action_horizon=64
     diffusion_horizon=64
-    batch_size_default=64
+    batch_size_default=32
     ;;
   smolvla)
     model_id=lerobot/smolvla_base
@@ -58,7 +58,7 @@ case ${model_profile} in
     model_initialization='Pretrained SmolVLM2-500M backbone + dataset-native action expert'
     image_transforms_enabled=False
     action_horizon=50
-    batch_size_default=64
+    batch_size_default=32
     ;;
   *) echo "unsupported MODEL_PROFILE: ${model_profile}" >&2; exit 2 ;;
 esac

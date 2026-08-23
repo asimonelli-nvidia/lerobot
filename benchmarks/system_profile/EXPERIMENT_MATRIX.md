@@ -31,14 +31,13 @@ is retained with the system metadata.
 
 | System | GR00T · LIBERO | GR00T · DROID | Diffusion · LIBERO | Diffusion · DROID | SmolVLA · LIBERO | SmolVLA · DROID |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| NVIDIA L40 | 64 | 64* | 64 | 64 | 64 | 64 |
-| NVIDIA H100 SXM | 64 | 64 | 64 | 64 | 64 | 64 |
-| NVIDIA H200 | 64 | 64 | 64 | 64 | 64 | 64 |
+| NVIDIA L40 | 32 | 32 | 32 | 32 | 32 | 32 |
+| NVIDIA H100 SXM | 32 | 32 | 32 | 32 | 32 | 32 |
+| NVIDIA H200 | 32 | 32 | 32 | 32 | 32 | 32 |
 
-Values are per-GPU batch size; every cell uses the same batch. The L40 GR00T DROID cell is the
-capacity gate because its previous batch-32 run left about 5.5 GiB p95 memory headroom. Batch 64 is
-reportable only if a short non-reportable fit test completes with safe headroom. If it does not, the
-entire matrix moves to batch 32 rather than introducing a one-cell exception.
+Values are per-GPU batch size; every cell uses the same batch. A non-reportable L40 GR00T DROID
+capacity gate showed that batch 64 used 45.5 of 46.1 GiB and failed on an additional 20 MiB
+allocation. Batch 32 is therefore the universal reference rather than a one-cell exception.
 
 Diffusion Policy uses FP32, its default 64-step action horizon, and the default ImageNet-pretrained
 ResNet-18 backbone. SmolVLA uses BF16, a 50-step horizon, the pretrained SmolVLM2-500M backbone, and a
@@ -64,7 +63,7 @@ batch-wait p50/p95, CPU seconds/sample, process memory, video-grouping opportuni
 deduplication. The Training card combines decode and preprocessing into one Dataloading stage and
 shows Model steps/s separately from update time.
 
-CUDA allocation failures in the capacity gate trigger the universal batch-32 fallback. DataLoader
-worker, IPC, shared-memory, or scheduler failures trigger an infrastructure retry and are never
-labeled OOM. Multi-GPU scaling is intentionally deferred until the single-GPU reference cards are
-stable.
+CUDA allocation failures are retained as calibration evidence and never presented as reportable
+comparisons. DataLoader worker, IPC, shared-memory, or scheduler failures trigger an infrastructure
+retry and are never labeled OOM. Multi-GPU scaling is intentionally deferred until the single-GPU
+reference cards are stable.
