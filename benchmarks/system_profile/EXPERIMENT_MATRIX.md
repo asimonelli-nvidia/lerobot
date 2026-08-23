@@ -32,7 +32,7 @@ is retained with the system metadata.
 | System | GR00T · LIBERO | GR00T · DROID | Diffusion · LIBERO | Diffusion · DROID | SmolVLA · LIBERO | SmolVLA · DROID |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | NVIDIA L40 | 32 | 32 | 32 | 32 | 32 | 32 |
-| NVIDIA H100 SXM | 32 | 32 | 32 | 32 | 32 | 32 |
+| NVIDIA H100 · 96 GB | 32 | 32 | 32 | 32 | 32 | 32 |
 | NVIDIA H200 | 32 | 32 | 32 | 32 | 32 | 32 |
 
 Values are per-GPU batch size; every cell uses the same batch. A non-reportable L40 GR00T DROID

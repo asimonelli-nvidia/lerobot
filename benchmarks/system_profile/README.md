@@ -20,7 +20,7 @@ The isolated dataloading target is where the batched reader can be attributed di
 
 The current matrix covers LIBERO Spatial and a deterministic 100-episode DROID 1.0.1 subset;
 GR00T N1.7, LeRobot Diffusion Policy with a ResNet-18 backbone, and SmolVLA; and one NVIDIA L40,
-H100 SXM, or H200 with 32 allocated CPU cores per measured GPU. SmolVLA follows LeRobot's
+H100 96 GB, or H200 with 32 allocated CPU cores per measured GPU. SmolVLA follows LeRobot's
 documented recipe: pretrained SmolVLM2-500M backbone weights with a dataset-native action expert.
 That initialization is recorded on every card.
 For Diffusion Policy and SmolVLA, the staged DROID copy recomputes temporal action statistics at the
