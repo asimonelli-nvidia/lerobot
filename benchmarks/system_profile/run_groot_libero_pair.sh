@@ -7,6 +7,7 @@ shared_root=${SHARED_ROOT}
 repo=${REPO_PATH:-${shared_root}/experiments/lerobot-batched-benchmark}
 environment=${PYTHON_ENV:-${shared_root}/dataloading/lerobot-batched-pr/.venv}
 model_source=${MODEL_SOURCE:-${shared_root}/v2d/artifacts/models/GR00T-N1.7-3B}
+resnet_weights_source=${RESNET18_WEIGHTS_SOURCE:-${shared_root}/experiments/benchmark-assets/resnet18-f37072fd.pth}
 hf_source=${HF_SOURCE:-${shared_root}/v2d/cache/huggingface}
 results_base=${RESULTS_ROOT:-${shared_root}/experiments/lerobot-batched-benchmark-results}
 system_label=${SYSTEM_LABEL:-unknown-system}
@@ -144,7 +145,8 @@ runtime=$(mktemp -d "${SLURM_TMPDIR:-/tmp}/lerobot-batched-${job_id}.XXXXXX")
 mkdir -p \
   "${results_root}" "${runtime}/sources" "${runtime}/data" "${runtime}/hf/hub" \
   "${runtime}/models" "${runtime}/outputs" "${runtime}/home" "${runtime}/wandb-cache" \
-  "${runtime}/wandb-config" "${runtime}/wandb-data" "${runtime}/cache/torch/kernels"
+  "${runtime}/wandb-config" "${runtime}/wandb-data" "${runtime}/cache/torch/kernels" \
+  "${runtime}/cache/torch/hub/checkpoints"
 
 cleanup() {
   if [[ -n ${gpu_monitor_pid:-} ]]; then
@@ -180,6 +182,10 @@ for required in \
 done
 if [[ ${model_profile} == groot && ! -d ${model_source} ]]; then
   echo "missing GR00T model input: ${model_source}" >&2
+  exit 2
+fi
+if [[ ${model_profile} == diffusion && ! -f ${resnet_weights_source} ]]; then
+  echo "missing ImageNet ResNet-18 weights: ${resnet_weights_source}" >&2
   exit 2
 fi
 
@@ -227,6 +233,9 @@ if [[ ${model_profile} == groot ]]; then
       policy_args[i]="--policy.base_model_path=${runtime}/models/GR00T-N1.7-3B"
     fi
   done
+fi
+if [[ ${model_profile} == diffusion ]]; then
+  cp "${resnet_weights_source}" "${runtime}/cache/torch/hub/checkpoints/resnet18-f37072fd.pth"
 fi
 if [[ ${model_profile} == smolvla ]]; then
   smolvla_hf_source=${SMOLVLA_HF_SOURCE:-${shared_root}/experiments/smolvla-assets/huggingface}
