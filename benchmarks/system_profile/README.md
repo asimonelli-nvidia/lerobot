@@ -41,3 +41,6 @@ experiment-card importer keeps all raw artifacts and chooses only target-critica
 card.
 
 Use `submit_matrix_job.sh` as the cluster entrypoint. It accepts `TARGET=training` or `TARGET=dataloading`; `BATCH_SIZE=32`, `NUM_WORKERS=4`, `WORKER_COUNTS=4`, and `PREFETCH_FACTOR=4` define the reference recipe. The agent-facing workflow and comparison guardrails live in `skills/physical-ai-experiments/SKILL.md`.
+
+`submit_reference_system.sh` submits all 12 reportable jobs for one system using the locked recipe.
+It requires the system's current Slurm partition, account, GPU GRES, and label as environment values.
