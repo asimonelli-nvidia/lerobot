@@ -20,7 +20,7 @@ case ${dataset_profile} in
     dataset_repo_id=IPEC-COMMUNITY/libero_spatial_no_noops_1.0.0_lerobot
     dataset_label=libero-spatial
     dataset_subset=all-432-episodes
-    batch_size_default=320
+    batch_size_default=64
     dataset_args=()
     ;;
   droid)
@@ -43,8 +43,12 @@ case ${model_profile} in
   groot)
     model_id=nvidia/GR00T-N1.7-3B
     model_label=groot-n1.7
+    model_precision=BF16
+    model_initialization='GR00T N1.7 pretrained checkpoint'
+    image_transforms_enabled=True
     if [[ ${dataset_profile} == droid ]]; then
       embodiment_tag=new_embodiment
+      horizon=16
       policy_args=(
         --policy.type=groot --policy.device=cuda
         --policy.base_model_path="${runtime_model_path:-__STAGED_GROOT_MODEL__}"
@@ -57,6 +61,7 @@ case ${model_profile} in
       )
     else
       embodiment_tag=libero_sim
+      horizon=40
       policy_args=(
         --policy.type=groot --policy.device=cuda
         --policy.base_model_path="${runtime_model_path:-__STAGED_GROOT_MODEL__}"
@@ -70,21 +75,18 @@ case ${model_profile} in
     model_id=lerobot/diffusion-resnet18
     model_label=diffusion-resnet18
     embodiment_tag=dataset-native
+    model_precision=FP32
+    model_initialization='ImageNet-pretrained ResNet-18 backbone'
+    image_transforms_enabled=False
     metadata_video_layout=hwc-with-channel-axis
-    if [[ ${dataset_profile} == droid ]]; then
-      horizon=16
-      action_steps=8
-      drop_last=7
-    else
-      horizon=32
-      action_steps=16
-      drop_last=15
-    fi
+    batch_size_default=64
+    horizon=64
+    action_steps=32
+    drop_last=7
     policy_args=(
       --policy.type=diffusion --policy.device=cuda
       --policy.horizon="${horizon}" --policy.n_action_steps="${action_steps}"
       --policy.drop_n_last_frames="${drop_last}"
-      --policy.pretrained_backbone_weights=null
       --policy.push_to_hub=false
     )
     ;;
@@ -92,6 +94,11 @@ case ${model_profile} in
     model_id=lerobot/smolvla_base
     model_label=smolvla-450m
     embodiment_tag=dataset-native
+    model_precision=BF16
+    model_initialization='Pretrained SmolVLM2-500M backbone + dataset-native action expert'
+    image_transforms_enabled=False
+    horizon=50
+    batch_size_default=64
     metadata_video_layout=hwc-with-channel-axis
     policy_args=(
       --policy.type=smolvla --policy.device=cuda
@@ -118,7 +125,8 @@ steps=${STEPS:-600}
 warmup_steps=${WARMUP_STEPS:-100}
 repeats=${REPEATS:-3}
 batch_size=${BATCH_SIZE:-${batch_size_default}}
-num_workers=${NUM_WORKERS:-15}
+num_workers=${NUM_WORKERS:-4}
+prefetch_factor=${PREFETCH_FACTOR:-4}
 telemetry_interval_ms=${TELEMETRY_INTERVAL_MS:-250}
 gpu_selector=${SLURM_JOB_GPUS:-${CUDA_VISIBLE_DEVICES:-}}
 gpu_query_args=()
@@ -247,8 +255,6 @@ export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export TOKENIZERS_PARALLELISM=false
 export NO_ALBUMENTATIONS_UPDATE=1
-export OMP_NUM_THREADS=1
-export MKL_NUM_THREADS=1
 export WANDB_MODE=offline
 export WANDB_SILENT=true
 export WANDB_CONSOLE=off
@@ -307,7 +313,10 @@ print(json.dumps({
         "id": "${model_id}",
         "profile": "${model_profile}",
         "embodiment_tag": "${embodiment_tag}",
-        "initialization": "pretrained SmolVLM2 backbone + dataset-native action expert" if "${model_profile}" == "smolvla" else "model default",
+        "initialization": "${model_initialization}",
+        "precision": "${model_precision}",
+        "action_horizon": ${horizon},
+        "image_transforms_enabled": ${image_transforms_enabled},
     },
     "comparison": {
         "baseline_sha": "${baseline_sha}",
@@ -325,6 +334,11 @@ print(json.dumps({
         "repeats": ${repeats},
         "batch_size_per_gpu": ${batch_size},
         "num_workers_per_gpu": ${num_workers},
+        "prefetch_factor": ${prefetch_factor},
+        "persistent_workers": True,
+        "multiprocessing_context": "spawn",
+        "pin_memory": True,
+        "log_frequency": 10,
         "seed": 42,
         "checkpoints": False,
         "evaluation": False,
@@ -344,6 +358,14 @@ image_transforms='{
   "saturation": {"weight": 1.0, "type": "ColorJitter", "kwargs": {"saturation": [0.5, 1.5]}},
   "hue":        {"weight": 1.0, "type": "ColorJitter", "kwargs": {"hue":        [-0.08, 0.08]}}
 }'
+dataset_transform_args=()
+if [[ ${model_profile} == groot ]]; then
+  dataset_transform_args=(
+    --dataset.image_transforms.enable=true
+    --dataset.image_transforms.max_num_transforms=4
+    "--dataset.image_transforms.tfs=${image_transforms}"
+  )
+fi
 
 run_one() {
   local implementation=$1
@@ -380,12 +402,11 @@ run_one() {
       --dataset.root="${runtime}/data/${dataset_staged_name}" \
       --dataset.revision=main --dataset.video_backend=torchcodec \
       "${dataset_args[@]}" \
-      --dataset.image_transforms.enable=true --dataset.image_transforms.max_num_transforms=4 \
-      --dataset.image_transforms.tfs="${image_transforms}" \
+      "${dataset_transform_args[@]}" \
       "${policy_args[@]}" \
       --batch_size="${batch_size}" --steps="${steps}" --save_checkpoint=false \
-      --env_eval_freq=0 --eval_steps=0 --log_freq=1 \
-      --num_workers="${num_workers}" --prefetch_factor=1 --persistent_workers=true \
+      --env_eval_freq=0 --eval_steps=0 --log_freq=10 \
+      --num_workers="${num_workers}" --prefetch_factor="${prefetch_factor}" --persistent_workers=true \
       --dataloader_multiprocessing_context=spawn \
       --wandb.enable=true --wandb.project=lerobot-system-benchmarks \
       --wandb.mode=offline --wandb.disable_artifact=true \

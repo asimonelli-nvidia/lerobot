@@ -31,16 +31,34 @@ case ${dataset_profile} in
 esac
 
 case ${model_profile} in
-  groot) model_id=nvidia/GR00T-N1.7-3B; metadata_video_layout=source ;;
+  groot)
+    model_id=nvidia/GR00T-N1.7-3B
+    metadata_video_layout=source
+    model_precision=BF16
+    model_initialization='GR00T N1.7 pretrained checkpoint'
+    image_transforms_enabled=True
+    action_horizon=40
+    [[ ${dataset_profile} == droid ]] && action_horizon=16
+    batch_size_default=64
+    ;;
   diffusion)
     model_id=lerobot/diffusion-resnet18
     metadata_video_layout=hwc-with-channel-axis
-    diffusion_horizon=16
-    [[ ${dataset_profile} == libero ]] && diffusion_horizon=32
+    model_precision=FP32
+    model_initialization='ImageNet-pretrained ResNet-18 backbone'
+    image_transforms_enabled=False
+    action_horizon=64
+    diffusion_horizon=64
+    batch_size_default=64
     ;;
   smolvla)
     model_id=lerobot/smolvla_base
     metadata_video_layout=hwc-with-channel-axis
+    model_precision=BF16
+    model_initialization='Pretrained SmolVLM2-500M backbone + dataset-native action expert'
+    image_transforms_enabled=False
+    action_horizon=50
+    batch_size_default=64
     ;;
   *) echo "unsupported MODEL_PROFILE: ${model_profile}" >&2; exit 2 ;;
 esac
@@ -56,9 +74,10 @@ proposal_patch_id=$(git -C "${repo}" show --pretty=email --no-ext-diff "${propos
 steps=${STEPS:-300}
 warmup_steps=${WARMUP_STEPS:-50}
 repeats=${REPEATS:-3}
-batch_size=${BATCH_SIZE:-128}
-worker_counts=${WORKER_COUNTS:-"0 4 8 15"}
+batch_size=${BATCH_SIZE:-${batch_size_default}}
+worker_counts=${WORKER_COUNTS:-"4"}
 worker_counts=${worker_counts//:/ }
+prefetch_factor=${PREFETCH_FACTOR:-4}
 telemetry_interval_ms=${TELEMETRY_INTERVAL_MS:-250}
 gpu_selector=${SLURM_JOB_GPUS:-${CUDA_VISIBLE_DEVICES:-}}
 gpu_query_args=()
@@ -151,7 +170,6 @@ done
 export HF_HOME=${runtime}/hf
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1
 export TOKENIZERS_PARALLELISM=false NO_ALBUMENTATIONS_UPDATE=1
-export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 export LD_LIBRARY_PATH=${shared_root}/dataloading/ffmpeg7-x86/lib:${LD_LIBRARY_PATH:-}
 export PYTHONPATH=${dependency_paths}:${PYTHONPATH:-}
 
@@ -176,13 +194,15 @@ print(json.dumps({
   "dataset": {"repo_id": "${dataset_repo_id}", "profile": "${dataset_profile}", "subset": "${dataset_subset}",
               "metadata_video_layout": "${metadata_video_layout}", "stats_adjustment": "${stats_adjustment}"},
   "model": {"id": "${model_id}", "profile": "${model_profile}",
-            "initialization": "pretrained SmolVLM2 backbone + dataset-native action expert" if "${model_profile}" == "smolvla" else "model default"},
+            "initialization": "${model_initialization}", "precision": "${model_precision}",
+            "action_horizon": ${action_horizon}, "image_transforms_enabled": ${image_transforms_enabled}},
   "comparison": {"baseline_sha": "${baseline_sha}", "proposal_sha": "${proposal_sha}",
                  "proposal_patch_id": "${proposal_patch_id}", "order": "AB/BA/AB"},
   "harness": {"revision": "${harness_sha}", "entrypoint": "benchmarks/system_profile/run_dataloader_pair.sh"},
   "benchmark": {"steps": ${steps}, "warmup_steps": ${warmup_steps}, "repeats": ${repeats},
                 "batch_size": ${batch_size}, "worker_counts": [${worker_counts// /,}], "seed": 42,
-                "prefetch_factor": 1, "persistent_workers": True, "storage": "node-local"},
+                "prefetch_factor": ${prefetch_factor}, "persistent_workers": True,
+                "multiprocessing_context": "spawn", "pin_memory": True, "storage": "node-local"},
   "telemetry": {"gpu_interval_ms": ${telemetry_interval_ms}, "gpu_selector": "${gpu_selector:-unresolved}"},
 }, indent=2, sort_keys=True))
 PY
@@ -215,7 +235,7 @@ run_one() {
       --dataset-profile "${dataset_profile}" --dataset-root "${runtime}/data/${dataset_staged_name}" \
       --dataset-repo-id "${dataset_repo_id}" --model-profile "${model_profile}" "${model_args[@]}" \
       --batch-size "${batch_size}" --num-workers "${workers}" --steps "${steps}" \
-      --warmup-steps "${warmup_steps}" --prefetch-factor 1 --seed 42 \
+      --warmup-steps "${warmup_steps}" --prefetch-factor "${prefetch_factor}" --seed 42 \
       --samples "${output_dir}/batches.jsonl" --summary "${loader_summary}" \
       > >(tee "${console}") 2>&1
   status=$?

@@ -30,7 +30,7 @@ from lerobot.datasets.sampler import EpisodeAwareSampler
 from lerobot.policies.diffusion.configuration_diffusion import DiffusionConfig
 from lerobot.policies.groot.configuration_groot import GrootConfig
 from lerobot.policies.smolvla.configuration_smolvla import SmolVLAConfig
-from lerobot.transforms import ImageTransformsConfig
+from lerobot.transforms import ImageTransformConfig, ImageTransformsConfig
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,7 +44,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-workers", type=int, required=True)
     parser.add_argument("--steps", type=int, default=300)
     parser.add_argument("--warmup-steps", type=int, default=50)
-    parser.add_argument("--prefetch-factor", type=int, default=1)
+    parser.add_argument("--prefetch-factor", type=int, default=4)
+    parser.add_argument(
+        "--image-transforms",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable the GR00T image-transform recipe. Defaults on for GR00T and off otherwise.",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--samples", type=Path, required=True)
     parser.add_argument("--summary", type=Path, required=True)
@@ -102,26 +108,44 @@ def make_policy_config(args: argparse.Namespace):
             load_vlm_weights=True,
             push_to_hub=False,
         )
-    horizon = 16 if args.dataset_profile == "droid" else 32
     return DiffusionConfig(
         device="cuda",
-        horizon=horizon,
-        n_action_steps=horizon // 2,
-        drop_n_last_frames=horizon - horizon // 2 - 2 + 1,
-        pretrained_backbone_weights=None,
         push_to_hub=False,
     )
 
 
 def make_dataset(args: argparse.Namespace):
     episodes = list(range(100)) if args.dataset_profile == "droid" else None
+    enable_image_transforms = args.image_transforms
+    if enable_image_transforms is None:
+        enable_image_transforms = args.model_profile == "groot"
+    image_transforms = ImageTransformsConfig(enable=enable_image_transforms)
+    if enable_image_transforms:
+        image_transforms = ImageTransformsConfig(
+            enable=True,
+            max_num_transforms=4,
+            tfs={
+                "brightness": ImageTransformConfig(
+                    weight=1.0, type="ColorJitter", kwargs={"brightness": (0.7, 1.3)}
+                ),
+                "contrast": ImageTransformConfig(
+                    weight=1.0, type="ColorJitter", kwargs={"contrast": (0.6, 1.4)}
+                ),
+                "saturation": ImageTransformConfig(
+                    weight=1.0, type="ColorJitter", kwargs={"saturation": (0.5, 1.5)}
+                ),
+                "hue": ImageTransformConfig(
+                    weight=1.0, type="ColorJitter", kwargs={"hue": (-0.08, 0.08)}
+                ),
+            },
+        )
     dataset_cfg = DatasetConfig(
         repo_id=args.dataset_repo_id,
         root=str(args.dataset_root),
         episodes=episodes,
         revision="main",
         video_backend="torchcodec",
-        image_transforms=ImageTransformsConfig(enable=True, max_num_transforms=4),
+        image_transforms=image_transforms,
     )
     config = TrainPipelineConfig(
         dataset=dataset_cfg,
